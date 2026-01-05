@@ -1,0 +1,109 @@
+{% extends 'base.html' %}
+
+{% block title %}Developer - AYZARA{% endblock %}
+{% block page_title %}Developer Info{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <!-- App Info -->
+        <div class="card mb-4 text-center">
+            <div class="card-body py-5">
+                <div class="mb-4">
+                    <span style="font-size: 80px;">📦</span>
+                </div>
+                <h1 class="gradient-text mb-2">AYZARA Dashboard</h1>
+                <p class="fs-5 text-muted mb-4">Packing Recording System</p>
+
+                <div class="d-flex justify-content-center gap-4 mb-4">
+                    <div>
+                        <h5 class="mb-0">v{{ app_version }}</h5>
+                        <small class="text-muted">Version</small>
+                    </div>
+                    <div>
+                        <h5 class="mb-0">Flask</h5>
+                        <small class="text-muted">Framework</small>
+                    </div>
+                    <div>
+                        <h5 class="mb-0">100%</h5>
+                        <small class="text-muted">FREE</small>
+                    </div>
+                </div>
+
+                <span class="badge bg-success px-3 py-2">Open Source • Self-Hosted</span>
+            </div>
+        </div>
+
+        <!-- Tech Stack -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title"><i class="bi bi-stack me-2"></i>Tech Stack</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="bg-glass p-3 rounded text-center">
+                            <h6 class="mb-1">Backend</h6>
+                            <small class="text-muted">Flask + SQLAlchemy</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="bg-glass p-3 rounded text-center">
+                            <h6 class="mb-1">Frontend</h6>
+                            <small class="text-muted">Bootstrap 5 + Chart.js</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="bg-glass p-3 rounded text-center">
+                            <h6 class="mb-1">Real-time</h6>
+                            <small class="text-muted">Flask-SocketIO</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="bg-glass p-3 rounded text-center">
+                            <h6 class="mb-1">Database</h6>
+                            <small class="text-muted">SQLite</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="bg-glass p-3 rounded text-center">
+                            <h6 class="mb-1">Video</h6>
+                            <small class="text-muted">FFmpeg</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="bg-glass p-3 rounded text-center">
+                            <h6 class="mb-1">Camera</h6>
+                            <small class="text-muted">RTSP / IP Camera</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Credits -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title"><i class="bi bi-heart me-2"></i>Credits</h5>
+            </div>
+            <div class="card-body text-center">
+                <p class="mb-3">Developed with ❤️ for</p>
+                <h4 class="gradient-text mb-3">{{ app_author }}</h4>
+                <p class="text-muted mb-4">
+                    Sistem recording video packing untuk e-commerce.<br>
+                    Mendukung Shopee, Tokopedia, Lazada, TikTok Shop.
+                </p>
+
+                <div class="d-flex justify-content-center gap-3">
+                    <a href="#" class="btn btn-glass">
+                        <i class="bi bi-github me-2"></i>GitHub
+                    </a>
+                    <a href="#" class="btn btn-glass">
+                        <i class="bi bi-globe me-2"></i>Website
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

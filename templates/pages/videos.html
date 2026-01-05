@@ -1,0 +1,228 @@
+{% extends 'base.html' %}
+
+{% block title %}Video Gallery - AYZARA{% endblock %}
+{% block page_title %}Video Gallery{% endblock %}
+
+{% block content %}
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form action="{{ url_for('videos') }}" method="get" class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">Cari Resi/Pegawai</label>
+                <input type="text" name="search" class="form-control" value="{{ search }}"
+                    placeholder="Ketik untuk cari...">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Platform</label>
+                <select name="platform" class="form-control">
+                    <option value="">Semua Platform</option>
+                    {% for key in platforms.keys() %}
+                    <option value="{{ key }}" {% if key==current_platform %}selected{% endif %}>{{ key }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search me-2"></i>Filter
+                </button>
+            </div>
+            <div class="col-md-2">
+                <div class="btn-group w-100" role="group">
+                    <button type="button" onclick="exportCSV()" class="btn btn-glass" title="Export CSV">
+                        <i class="bi bi-filetype-csv"></i>
+                    </button>
+                    <button type="button" onclick="exportPDF()" class="btn btn-glass" title="Print Report">
+                        <i class="bi bi-printer"></i>
+                    </button>
+                    <button type="button" onclick="generateThumbnails()" class="btn btn-glass"
+                        title="Generate Thumbnails" id="btnGenerateThumbs">
+                        <i class="bi bi-image"></i>
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Video Grid -->
+<div class="video-grid mb-4">
+    {% for rec in recordings %}
+    {% set video_path = rec.file_video.replace('\\', '/') if rec.file_video else '' %}
+    {% set video_relative = video_path.replace('recordings/', '') if video_path.startswith('recordings') else video_path
+    %}
+    {% set video_filename = video_path.split('/')[-1] if video_path else '' %}
+    <div class="video-card"
+        onclick="playVideo('/recordings/{{ video_relative }}', '{{ rec.resi }}', {{ rec.durasi_detik or 0 }})">
+        <div class="video-thumbnail">
+            {% set thumb_name = 'thumb_' + video_filename.replace('.mp4', '.jpg') if video_filename else '' %}
+            <img src="/uploads/thumbnails/{{ thumb_name }}" alt="Thumbnail"
+                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                style="width:100%; height:100%; object-fit:cover;">
+            <div class="thumbnail-fallback"
+                style="display:none; height:100%; align-items:center; justify-content:center; background:var(--bg-darker);">
+                <i class="bi bi-film" style="font-size: 48px; opacity: 0.3;"></i>
+            </div>
+            <i class="bi bi-play-circle-fill play-icon"></i>
+            {% if rec.durasi_detik %}
+            <span class="video-duration">{{ rec.durasi_detik }}s</span>
+            {% endif %}
+        </div>
+        <div class="video-info">
+            <div class="video-resi">📦 {{ rec.resi }}</div>
+            <div class="video-meta">
+                <span class="badge badge-platform">{{ rec.platform }}</span>
+                <span class="ms-2">👤 {{ rec.pegawai }}</span>
+            </div>
+            <div class="video-meta mt-1">
+                <i class="bi bi-calendar me-1"></i>{{ rec.waktu_mulai[:16] if rec.waktu_mulai else '-' }}
+                {% if rec.file_size_kb and rec.file_size_kb > 1024 %}
+                <span class="ms-2">💾 {{ (rec.file_size_kb / 1024)|round(1) }} MB</span>
+                {% elif rec.file_size_kb and rec.file_size_kb > 0 %}
+                <span class="ms-2">💾 {{ rec.file_size_kb }} KB</span>
+                {% else %}
+                <span class="ms-2 text-warning">⚠️ 0 KB</span>
+                {% endif %}
+            </div>
+            <!-- Share buttons -->
+            <div class="mt-2">
+                <button class="btn btn-sm btn-glass"
+                    onclick="event.stopPropagation(); shareToSocial('whatsapp', '/recordings/{{ rec.file_video.split('/')[-1] if rec.file_video else '' }}', '{{ rec.resi }}')"
+                    title="Share WhatsApp">
+                    <i class="bi bi-whatsapp"></i>
+                </button>
+                <button class="btn btn-sm btn-glass"
+                    onclick="event.stopPropagation(); shareToSocial('telegram', '/recordings/{{ rec.file_video.split('/')[-1] if rec.file_video else '' }}', '{{ rec.resi }}')"
+                    title="Share Telegram">
+                    <i class="bi bi-telegram"></i>
+                </button>
+                <button class="btn btn-sm btn-glass"
+                    onclick="event.stopPropagation(); shareToSocial('copy', '/recordings/{{ rec.file_video.split('/')[-1] if rec.file_video else '' }}', '{{ rec.resi }}')"
+                    title="Copy Link">
+                    <i class="bi bi-link-45deg"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12">
+        <div class="card text-center p-5">
+            <div class="stat-icon mb-3">🎬</div>
+            <h5>Belum ada video</h5>
+            <p class="text-muted">Recording video akan muncul di sini</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Pagination -->
+{% if pagination.pages > 1 %}
+<nav aria-label="Page navigation">
+    <ul class="pagination justify-content-center">
+        {% if pagination.has_prev %}
+        <li class="page-item">
+            <a class="page-link"
+                href="?page={{ pagination.prev_num }}&platform={{ current_platform }}&search={{ search }}">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+        </li>
+        {% endif %}
+
+        {% for page in pagination.iter_pages() %}
+        {% if page %}
+        <li class="page-item {% if page == pagination.page %}active{% endif %}">
+            <a class="page-link" href="?page={{ page }}&platform={{ current_platform }}&search={{ search }}">{{ page
+                }}</a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link">...</span></li>
+        {% endif %}
+        {% endfor %}
+
+        {% if pagination.has_next %}
+        <li class="page-item">
+            <a class="page-link"
+                href="?page={{ pagination.next_num }}&platform={{ current_platform }}&search={{ search }}">
+                <i class="bi bi-chevron-right"></i>
+            </a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+<p class="text-center text-muted">
+    Menampilkan {{ recordings|length }} dari {{ pagination.total }} video
+</p>
+{% endif %}
+
+<!-- Video Modal -->
+<div class="modal fade" id="videoModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalVideoTitle">Video</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <video id="modalVideo" controls class="w-100" style="max-height: 70vh;"
+                    onerror="this.outerHTML='<div class=\'text-center p-5\'><i class=\'bi bi-exclamation-triangle text-warning\' style=\'font-size: 48px;\'></i><p class=\'text-muted mt-3\'>Video tidak dapat diputar atau file tidak ditemukan</p></div>';"></video>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Auto-generate Thumbnails Notification -->
+<div id="thumbGeneratingAlert" class="alert alert-info position-fixed bottom-0 end-0 m-3"
+    style="display: none; z-index: 1050;">
+    <span class="spinner-border spinner-border-sm me-2"></span>
+    Generating thumbnails...
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Auto-generate thumbnails on page load if there are missing thumbnails
+    document.addEventListener('DOMContentLoaded', function () {
+        // Check for missing thumbnails by looking at fallback elements that are visible
+        setTimeout(() => {
+            const fallbacks = document.querySelectorAll('.thumbnail-fallback');
+            let missingCount = 0;
+
+            fallbacks.forEach(el => {
+                // Check if fallback is visible (meaning thumbnail failed to load)
+                const computedStyle = window.getComputedStyle(el);
+                if (computedStyle.display !== 'none') {
+                    missingCount++;
+                }
+            });
+
+            if (missingCount > 0) {
+                console.log('[Thumbnail] Found ' + missingCount + ' missing thumbnails, auto-generating...');
+                autoGenerateThumbnails();
+            }
+        }, 1000); // Wait for images to load/fail
+    });
+
+    async function autoGenerateThumbnails() {
+        const alert = document.getElementById('thumbGeneratingAlert');
+        if (alert) alert.style.display = 'block';
+
+        try {
+            const response = await fetch('/api/generate-thumbnails-batch', {
+                method: 'POST'
+            });
+            const data = await response.json();
+
+            if (data.generated > 0) {
+                console.log('[Thumbnail] Generated ' + data.generated + ' thumbnails');
+                // Reload page to show new thumbnails
+                location.reload();
+            } else {
+                if (alert) alert.style.display = 'none';
+            }
+        } catch (error) {
+            console.error('[Thumbnail] Error:', error);
+            if (alert) alert.style.display = 'none';
+        }
+    }
+</script>
+{% endblock %}

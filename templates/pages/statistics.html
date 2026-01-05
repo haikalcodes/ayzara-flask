@@ -1,0 +1,173 @@
+{% extends 'base.html' %}
+
+{% block title %}Statistics - AYZARA{% endblock %}
+{% block page_title %}Statistics{% endblock %}
+
+{% block content %}
+<!-- Today Stats -->
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon">📦</div>
+            <div class="stat-value">{{ stats.total }}</div>
+            <div class="stat-label">Total Hari Ini</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card success">
+            <div class="stat-icon">✅</div>
+            <div class="stat-value">{{ stats.completed }}</div>
+            <div class="stat-label">Selesai</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card warning">
+            <div class="stat-icon">⏱️</div>
+            <div class="stat-value">{{ stats.avg_duration }}s</div>
+            <div class="stat-label">Rata-rata Durasi</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card info">
+            <div class="stat-icon">💾</div>
+            <div class="stat-value">{{ stats.total_size_mb }} MB</div>
+            <div class="stat-label">Total Size</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Weekly Chart -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title"><i class="bi bi-graph-up me-2"></i>Rekaman 7 Hari Terakhir</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="weeklyChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Platform Breakdown -->
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title"><i class="bi bi-pie-chart me-2"></i>Per Platform</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="platformChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Leaderboard -->
+<div class="row g-4 mt-2">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title"><i class="bi bi-trophy me-2"></i>Top Pegawai</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">Rank</th>
+                            <th>Nama Pegawai</th>
+                            <th class="text-end">Total Rekaman</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in leaderboard %}
+                        <tr>
+                            <td>
+                                {% if loop.index == 1 %}🥇
+                                {% elif loop.index == 2 %}🥈
+                                {% elif loop.index == 3 %}🥉
+                                {% else %}{{ loop.index }}
+                                {% endif %}
+                            </td>
+                            <td><strong>{{ item[0] }}</strong></td>
+                            <td class="text-end">
+                                <span class="badge bg-primary">{{ item[1] }}</span>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="3" class="text-center text-muted py-4">
+                                Belum ada data
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Export -->
+<div class="mt-4 text-center">
+    <button onclick="exportCSV()" class="btn btn-primary me-2">
+        <i class="bi bi-filetype-csv me-2"></i>Export CSV
+    </button>
+    <button onclick="exportPDF()" class="btn btn-glass">
+        <i class="bi bi-printer me-2"></i>Print Report
+    </button>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Weekly Chart
+    const weeklyData = {{ weekly_data | tojson }};
+    new Chart(document.getElementById('weeklyChart'), {
+        type: 'bar',
+        data: {
+            labels: weeklyData.map(d => d.day),
+            datasets: [{
+                label: 'Rekaman',
+                data: weeklyData.map(d => d.count),
+                backgroundColor: 'rgba(255, 107, 53, 0.6)',
+                borderColor: 'rgb(255, 107, 53)',
+                borderWidth: 1,
+                borderRadius: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+
+    // Platform Chart
+    const platformData = {{ platform_data | tojson }};
+    new Chart(document.getElementById('platformChart'), {
+        type: 'doughnut',
+        data: {
+            labels: platformData.map(d => d.platform),
+            datasets: [{
+                data: platformData.map(d => d.count),
+                backgroundColor: platformData.map(d => d.color),
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: 'rgba(255,255,255,0.7)' }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,534 @@
+{% extends "base.html" %}
+{% block title %}Pengaturan Kamera - AYZARA Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>📹 Pengaturan Kamera</h1>
+    <p>Kelola daftar kamera IP untuk recording</p>
+</div>
+
+<!-- Status Kamera Aktif -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h3>🟢 Kamera Aktif</h3>
+    </div>
+    <div class="card-body">
+        <div id="active-camera-info">
+            <p class="text-muted">Memuat informasi kamera...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Daftar Kamera -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h3>📋 Daftar Kamera</h3>
+        <button class="btn btn-primary" onclick="showAddCameraModal()">
+            ➕ Tambah Kamera
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table" id="camera-table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Nama</th>
+                        <th>URL</th>
+                        <th>Enabled</th>
+                        <th>Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="camera-list">
+                    <tr>
+                        <td colspan="5" class="text-center text-muted">Memuat daftar kamera...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Tambah/Edit Kamera -->
+<div class="modal" id="camera-modal" style="display: none;">
+    <div class="modal-overlay" onclick="closeCameraModal()"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modal-title">Tambah Kamera</h3>
+            <button class="modal-close" onclick="closeCameraModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="camera-form">
+                <input type="hidden" id="camera-id" value="">
+
+                <div class="form-group">
+                    <label for="camera-name">Nama Kamera</label>
+                    <input type="text" id="camera-name" class="form-control" placeholder="Contoh: Gudang WiFi A"
+                        required>
+                </div>
+
+                <div class="form-group">
+                    <label for="camera-url">URL RTSP</label>
+                    <input type="text" id="camera-url" class="form-control"
+                        placeholder="rtsp://admin:password@192.168.1.10:554/stream" required>
+                    <small class="form-text text-muted">
+                        Format: rtsp://[username]:[password]@[IP]:[port]/[path]
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="camera-enabled" checked>
+                        <span>Kamera Aktif (Enabled)</span>
+                    </label>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeCameraModal()">
+                        Batal
+                    </button>
+                    <button type="button" class="btn btn-info" onclick="testCameraConnection()">
+                        🔍 Test Koneksi
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        💾 Simpan
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Panduan -->
+<div class="card">
+    <div class="card-header">
+        <h3>📖 Panduan</h3>
+    </div>
+    <div class="card-body">
+        <div class="help-section">
+            <h4>Cara Menambah Kamera:</h4>
+            <ol>
+                <li>Klik tombol "Tambah Kamera"</li>
+                <li>Isi nama kamera (untuk identifikasi)</li>
+                <li>Masukkan URL RTSP kamera</li>
+                <li>Klik "Test Koneksi" untuk memastikan kamera terhubung</li>
+                <li>Klik "Simpan" untuk menyimpan</li>
+            </ol>
+
+            <h4>Cara Kerja Auto-Fallback:</h4>
+            <ul>
+                <li>Saat recorder dimulai, sistem akan mencoba connect ke setiap kamera</li>
+                <li>Kamera dicoba dari atas ke bawah (urutan di tabel)</li>
+                <li>Kamera pertama yang berhasil connect akan digunakan</li>
+                <li>Jika kamera aktif disconnect, restart recorder untuk auto-switch</li>
+            </ul>
+
+            <h4>Tips:</h4>
+            <ul>
+                <li>Simpan beberapa kamera dengan WiFi berbeda untuk backup</li>
+                <li>Disable kamera yang tidak digunakan untuk mempercepat startup</li>
+                <li>Gunakan "Test Koneksi" untuk memastikan URL benar</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Modal Styles */
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-content {
+        position: relative;
+        background: var(--card-bg);
+        border-radius: 12px;
+        max-width: 500px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .modal-header h3 {
+        margin: 0;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: var(--text-secondary);
+    }
+
+    .modal-close:hover {
+        color: var(--text-color);
+    }
+
+    .modal-body {
+        padding: 20px;
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        background: var(--bg-color);
+        color: var(--text-color);
+        font-size: 14px;
+    }
+
+    .form-control:focus {
+        outline: none;
+        border-color: var(--primary-color);
+    }
+
+    .form-text {
+        font-size: 12px;
+        margin-top: 4px;
+    }
+
+    .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+    }
+
+    .checkbox-label input {
+        width: 18px;
+        height: 18px;
+    }
+
+    .form-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        margin-top: 20px;
+    }
+
+    /* Camera Status */
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    .status-online {
+        background: rgba(16, 185, 129, 0.2);
+        color: #10b981;
+    }
+
+    .status-offline {
+        background: rgba(239, 68, 68, 0.2);
+        color: #ef4444;
+    }
+
+    .status-checking {
+        background: rgba(234, 179, 8, 0.2);
+        color: #eab308;
+    }
+
+    .url-text {
+        font-family: monospace;
+        font-size: 12px;
+        max-width: 250px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* Help Section */
+    .help-section h4 {
+        margin-top: 20px;
+        margin-bottom: 10px;
+        color: var(--primary-color);
+    }
+
+    .help-section ol,
+    .help-section ul {
+        margin-left: 20px;
+    }
+
+    .help-section li {
+        margin-bottom: 8px;
+    }
+</style>
+
+<script>
+    // Global variables
+    let cameras = [];
+
+    // Load cameras on page load
+    document.addEventListener('DOMContentLoaded', function () {
+        loadCameras();
+    });
+
+    // Load camera list from API
+    function loadCameras() {
+        fetch('/api/cameras')
+            .then(response => response.json())
+            .then(data => {
+                cameras = data.cameras || [];
+                renderCameraList();
+                renderActiveCameraInfo(data.active_index);
+            })
+            .catch(error => {
+                console.error('Error loading cameras:', error);
+                document.getElementById('camera-list').innerHTML =
+                    '<tr><td colspan="5" class="text-center text-danger">Gagal memuat daftar kamera</td></tr>';
+            });
+    }
+
+    // Render camera list table
+    function renderCameraList() {
+        const tbody = document.getElementById('camera-list');
+
+        if (cameras.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Belum ada kamera. Klik "Tambah Kamera" untuk menambahkan.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = cameras.map((cam, idx) => `
+        <tr data-id="${cam.id}">
+            <td>
+                <span class="status-badge status-checking" id="status-${idx}">
+                    ⏳ Checking...
+                </span>
+            </td>
+            <td><strong>${escapeHtml(cam.name)}</strong></td>
+            <td><span class="url-text" title="${escapeHtml(cam.url)}">${escapeHtml(cam.url)}</span></td>
+            <td>
+                <span class="status-badge ${cam.enabled ? 'status-online' : 'status-offline'}">
+                    ${cam.enabled ? '✅ Aktif' : '❌ Disabled'}
+                </span>
+            </td>
+            <td>
+                <button class="btn btn-sm btn-info" onclick="testCamera(${idx})">🔍 Test</button>
+                <button class="btn btn-sm btn-secondary" onclick="editCamera(${idx})">✏️ Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteCamera(${idx})">🗑️ Hapus</button>
+            </td>
+        </tr>
+    `).join('');
+
+        // Check status for each camera
+        cameras.forEach((cam, idx) => {
+            checkCameraStatus(cam.url, idx);
+        });
+    }
+
+    // Render active camera info
+    function renderActiveCameraInfo(activeIndex) {
+        const container = document.getElementById('active-camera-info');
+
+        if (activeIndex >= 0 && activeIndex < cameras.length) {
+            const cam = cameras[activeIndex];
+            container.innerHTML = `
+            <div class="d-flex align-items-center gap-3">
+                <span class="status-badge status-online">🟢 Terhubung</span>
+                <strong>${escapeHtml(cam.name)}</strong>
+                <span class="url-text">${escapeHtml(cam.url)}</span>
+            </div>
+        `;
+        } else {
+            container.innerHTML = '<p class="text-warning">⚠️ Tidak ada kamera yang aktif</p>';
+        }
+    }
+
+    // Check camera status
+    function checkCameraStatus(url, idx) {
+        fetch('/api/cameras/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: url })
+        })
+            .then(response => response.json())
+            .then(data => {
+                const badge = document.getElementById(`status-${idx}`);
+                if (badge) {
+                    if (data.success) {
+                        badge.className = 'status-badge status-online';
+                        badge.innerHTML = '🟢 Online';
+                    } else {
+                        badge.className = 'status-badge status-offline';
+                        badge.innerHTML = '🔴 Offline';
+                    }
+                }
+            })
+            .catch(() => {
+                const badge = document.getElementById(`status-${idx}`);
+                if (badge) {
+                    badge.className = 'status-badge status-offline';
+                    badge.innerHTML = '❓ Unknown';
+                }
+            });
+    }
+
+    // Show add camera modal
+    function showAddCameraModal() {
+        document.getElementById('modal-title').textContent = 'Tambah Kamera';
+        document.getElementById('camera-id').value = '';
+        document.getElementById('camera-name').value = '';
+        document.getElementById('camera-url').value = '';
+        document.getElementById('camera-enabled').checked = true;
+        document.getElementById('camera-modal').style.display = 'flex';
+    }
+
+    // Close modal
+    function closeCameraModal() {
+        document.getElementById('camera-modal').style.display = 'none';
+    }
+
+    // Edit camera
+    function editCamera(idx) {
+        const cam = cameras[idx];
+        document.getElementById('modal-title').textContent = 'Edit Kamera';
+        document.getElementById('camera-id').value = cam.id;
+        document.getElementById('camera-name').value = cam.name;
+        document.getElementById('camera-url').value = cam.url;
+        document.getElementById('camera-enabled').checked = cam.enabled;
+        document.getElementById('camera-modal').style.display = 'flex';
+    }
+
+    // Test camera connection from modal
+    function testCameraConnection() {
+        const url = document.getElementById('camera-url').value;
+        if (!url) {
+            alert('Masukkan URL kamera terlebih dahulu');
+            return;
+        }
+
+        const btn = event.target;
+        btn.disabled = true;
+        btn.textContent = '⏳ Testing...';
+
+        fetch('/api/cameras/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: url })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ Koneksi berhasil! Kamera dapat digunakan.');
+                } else {
+                    alert('❌ Koneksi gagal: ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('❌ Error: ' + error.message);
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.textContent = '🔍 Test Koneksi';
+            });
+    }
+
+    // Test camera from table
+    function testCamera(idx) {
+        const cam = cameras[idx];
+        const badge = document.getElementById(`status-${idx}`);
+
+        badge.className = 'status-badge status-checking';
+        badge.innerHTML = '⏳ Testing...';
+
+        checkCameraStatus(cam.url, idx);
+    }
+
+    // Delete camera
+    function deleteCamera(idx) {
+        const cam = cameras[idx];
+        if (!confirm(`Hapus kamera "${cam.name}"?`)) return;
+
+        fetch(`/api/cameras/${cam.id}`, { method: 'DELETE' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadCameras();
+                } else {
+                    alert('Gagal menghapus: ' + data.message);
+                }
+            })
+            .catch(error => alert('Error: ' + error.message));
+    }
+
+    // Form submit
+    document.getElementById('camera-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        const id = document.getElementById('camera-id').value;
+        const data = {
+            name: document.getElementById('camera-name').value,
+            url: document.getElementById('camera-url').value,
+            enabled: document.getElementById('camera-enabled').checked
+        };
+
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/api/cameras/${id}` : '/api/cameras';
+
+        fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    closeCameraModal();
+                    loadCameras();
+                } else {
+                    alert('Gagal menyimpan: ' + result.message);
+                }
+            })
+            .catch(error => alert('Error: ' + error.message));
+    });
+
+    // Escape HTML
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+</script>
+{% endblock %}

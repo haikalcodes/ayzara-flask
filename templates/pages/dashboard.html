@@ -1,0 +1,149 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - AYZARA{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- Stats Cards -->
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon">📦</div>
+            <div class="stat-value" id="stat-total">{{ stats.total }}</div>
+            <div class="stat-label">Total Hari Ini</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card success">
+            <div class="stat-icon">✅</div>
+            <div class="stat-value" id="stat-completed">{{ stats.completed }}</div>
+            <div class="stat-label">Selesai</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card warning">
+            <div class="stat-icon">⏱️</div>
+            <div class="stat-value" id="stat-avg-duration">{{ stats.avg_duration }}s</div>
+            <div class="stat-label">Rata-rata Durasi</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card info">
+            <div class="stat-icon">💾</div>
+            <div class="stat-value" id="stat-size">{{ stats.total_size_mb }} MB</div>
+            <div class="stat-label">Total Size</div>
+        </div>
+    </div>
+</div>
+
+<!-- Recording Status -->
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title"><i class="bi bi-broadcast me-2"></i>Status Recording</h5>
+            </div>
+            <div class="card-body text-center">
+                {% if active_recording %}
+                <div class="mb-3">
+                    <span class="recording-pulse" style="width: 20px; height: 20px; display: inline-block;"></span>
+                </div>
+                <h4 class="text-danger mb-3">RECORDING</h4>
+                <p class="text-muted mb-0">Recording Packing sedang Berlangsung</p>
+                {% else %}
+                <div class="mb-3">
+                    <i class="bi bi-check-circle-fill text-success" style="font-size: 48px;"></i>
+                </div>
+                <h4 class="text-success">SIAP</h4>
+                <p class="text-muted mb-0">Tidak ada recording aktif</p>
+                <a href="{{ url_for('monitoring') }}" class="btn btn-primary mt-3">
+                    <i class="bi bi-broadcast me-2"></i>Buka Live Monitor
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0"><i class="bi bi-clock-history me-2"></i>Rekaman Terbaru</h5>
+                <a href="{{ url_for('videos') }}" class="btn btn-sm btn-glass">Lihat Semua</a>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Resi</th>
+                            <th>Pegawai</th>
+                            <th>Platform</th>
+                            <th>Waktu</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rec in recent_recordings[:5] %}
+                        <tr>
+                            <td><strong>{{ rec.resi }}</strong></td>
+                            <td>{{ rec.pegawai }}</td>
+                            <td><span class="badge badge-platform">{{ rec.platform }}</span></td>
+                            <td class="text-muted">{{ rec.waktu_mulai[:16] if rec.waktu_mulai else '-' }}</td>
+                            <td>
+                                {% if rec.status == 'COMPLETED' %}
+                                <span class="badge badge-status-completed">✅ Selesai</span>
+                                {% elif rec.status == 'RECORDING' %}
+                                <span class="badge badge-status-recording">🔴 Recording</span>
+                                {% else %}
+                                <span class="badge badge-status-error">⚠️ Error</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">
+                                Belum ada rekaman hari ini
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row g-4">
+    <div class="col-md-3">
+        <a href="{{ url_for('camera') }}" class="card text-center p-4 text-decoration-none">
+            <div class="stat-icon">📷</div>
+            <h6 class="mb-0">Camera Capture</h6>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="{{ url_for('videos') }}" class="card text-center p-4 text-decoration-none">
+            <div class="stat-icon">🎬</div>
+            <h6 class="mb-0">Video Gallery</h6>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="{{ url_for('statistics') }}" class="card text-center p-4 text-decoration-none">
+            <div class="stat-icon">📊</div>
+            <h6 class="mb-0">Statistics</h6>
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="{{ url_for('team') }}" class="card text-center p-4 text-decoration-none">
+            <div class="stat-icon">👥</div>
+            <h6 class="mb-0">Team</h6>
+        </a>
+    </div>
+</div>
+
+<!-- Info Banner -->
+<div class="alert alert-info mt-4" role="alert">
+    <i class="bi bi-info-circle me-2"></i>
+    <strong>Tips:</strong> Gunakan <code>JALANKAN_RECORDER.bat</code> (Terminal) untuk recording dengan kecepatan
+    maksimal!
+</div>
+{% endblock %}

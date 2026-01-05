@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+
+{% block title %}Live Monitoring - AYZARA{% endblock %}
+{% block page_title %}Live Monitoring{% endblock %}
+
+{% block content %}
+<!-- Live Stream Viewer Section - Now at Top -->
+<div class="row g-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0"><i class="bi bi-play-circle me-2"></i>Live Stream Viewer</h5>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-glass" onclick="toggleStreamPanel()">
+                        <i class="bi bi-chevron-down" id="streamToggleIcon"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body" id="streamPanel">
+                <!-- Stream URL Input -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-8">
+                        <div class="input-group">
+                            <span class="input-group-text bg-glass border-0 text-muted">
+                                <i class="bi bi-link-45deg"></i>
+                            </span>
+                            <input type="text" class="form-control" id="streamUrl"
+                                placeholder="Paste URL Live Stream Shopee/TikTok di sini..."
+                                style="background: var(--bg-glass); border-color: var(--border-color);">
+                        </div>
+                        <small class="text-muted mt-1 d-block">
+                            Contoh: https://live.shopee.co.id/share/... atau https://www.tiktok.com/@username/live
+                        </small>
+                    </div>
+                    <div class="col-md-4 d-flex gap-2">
+                        <button class="btn btn-primary flex-grow-1" onclick="loadStream()">
+                            <i class="bi bi-play-fill me-1"></i>Tonton
+                        </button>
+                        <button class="btn btn-glass" onclick="clearStream()">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Quick Platform Buttons -->
+                <div class="mb-4">
+                    <span class="text-muted me-2">Buka di Tab Baru:</span>
+                    <a href="https://live.shopee.co.id" target="_blank" class="btn btn-sm"
+                        style="background: #EE4D2D; color: white;">
+                        🛒 Shopee Live
+                    </a>
+                    <a href="https://www.tiktok.com/live" target="_blank" class="btn btn-sm ms-2"
+                        style="background: #000000; color: white; border: 1px solid #333;">
+                        🎵 TikTok Live
+                    </a>
+                    <a href="https://www.lazada.co.id/live" target="_blank" class="btn btn-sm ms-2"
+                        style="background: #0F146D; color: white;">
+                        🛍️ Lazada Live
+                    </a>
+                </div>
+
+                <!-- Stream Container -->
+                <div id="streamContainer" class="stream-container" style="display: none;">
+                    <div class="stream-wrapper position-relative" style="
+                        background: var(--bg-darker);
+                        border-radius: 12px;
+                        overflow: hidden;
+                        aspect-ratio: 16/9;
+                        max-height: 480px;
+                    ">
+                        <iframe id="streamFrame" style="width: 100%; height: 100%; border: none;"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowfullscreen>
+                        </iframe>
+                        <div id="streamPlaceholder"
+                            class="position-absolute top-50 start-50 translate-middle text-center">
+                            <i class="bi bi-broadcast text-muted" style="font-size: 64px;"></i>
+                            <p class="text-muted mt-3">Paste URL live stream dan klik "Tonton"</p>
+                        </div>
+                    </div>
+
+                    <!-- Stream Info -->
+                    <div class="d-flex justify-content-between align-items-center mt-3">
+                        <div class="text-muted small" id="streamInfo">
+                            <i class="bi bi-info-circle me-1"></i>Streaming tidak mengganggu recording terminal
+                        </div>
+                        <button class="btn btn-sm btn-glass" onclick="openInNewTab()">
+                            <i class="bi bi-box-arrow-up-right me-1"></i>Buka di Tab Baru
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Empty State -->
+                <div id="streamEmpty" class="text-center py-4">
+                    <i class="bi bi-tv text-muted" style="font-size: 48px;"></i>
+                    <p class="text-muted mt-2 mb-0">Belum ada stream yang ditonton</p>
+                    <small class="text-muted">Paste URL live stream di atas untuk mulai menonton</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Info -->
+<div class="alert alert-info mt-4" role="alert">
+    <i class="bi bi-info-circle me-2"></i>
+    <strong>Tips:</strong> Streaming live tidak mengganggu proses recording di terminal.
+    Gunakan halaman <a href="{{ url_for('index') }}">Dashboard</a> untuk melihat status recording.
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Stream Panel Toggle
+    function toggleStreamPanel() {
+        const panel = document.getElementById('streamPanel');
+        const icon = document.getElementById('streamToggleIcon');
+        if (panel.style.display === 'none') {
+            panel.style.display = 'block';
+            icon.classList.remove('bi-chevron-up');
+            icon.classList.add('bi-chevron-down');
+        } else {
+            panel.style.display = 'none';
+            icon.classList.remove('bi-chevron-down');
+            icon.classList.add('bi-chevron-up');
+        }
+    }
+
+    // Load Stream
+    function loadStream() {
+        const url = document.getElementById('streamUrl').value.trim();
+        if (!url) {
+            alert('Masukkan URL live stream terlebih dahulu');
+            return;
+        }
+
+        // Show stream container
+        document.getElementById('streamContainer').style.display = 'block';
+        document.getElementById('streamEmpty').style.display = 'none';
+        document.getElementById('streamPlaceholder').style.display = 'none';
+
+        const frame = document.getElementById('streamFrame');
+
+        // Convert URL to embed format if possible
+        let embedUrl = url;
+
+        // Shopee Live - try to embed directly
+        if (url.includes('shopee')) {
+            // Shopee doesn't support direct embed, open in new tab instead
+            window.open(url, '_blank');
+            document.getElementById('streamInfo').innerHTML =
+                '<i class="bi bi-check-circle text-success me-1"></i>Shopee Live dibuka di tab baru';
+            return;
+        }
+
+        // TikTok Live - try to embed
+        if (url.includes('tiktok.com')) {
+            // TikTok doesn't support direct embed for live, open in new tab
+            window.open(url, '_blank');
+            document.getElementById('streamInfo').innerHTML =
+                '<i class="bi bi-check-circle text-success me-1"></i>TikTok Live dibuka di tab baru';
+            return;
+        }
+
+        // For other URLs (like direct m3u8, HLS, etc), try to embed
+        if (url.includes('.m3u8') || url.includes('rtmp://') || url.includes('rtsp://')) {
+            // For HLS/RTMP streams, we need a player
+            document.getElementById('streamInfo').innerHTML =
+                '<i class="bi bi-exclamation-triangle text-warning me-1"></i>Format ini memerlukan player khusus. Coba buka di VLC.';
+            return;
+        }
+
+        // Try to embed the URL directly
+        frame.src = embedUrl;
+        document.getElementById('streamInfo').innerHTML =
+            '<i class="bi bi-broadcast text-success me-1"></i>Stream loaded: ' + url.substring(0, 50) + '...';
+
+        // Save to localStorage
+        localStorage.setItem('lastStreamUrl', url);
+    }
+
+    // Clear Stream
+    function clearStream() {
+        document.getElementById('streamUrl').value = '';
+        document.getElementById('streamFrame').src = '';
+        document.getElementById('streamContainer').style.display = 'none';
+        document.getElementById('streamEmpty').style.display = 'block';
+        localStorage.removeItem('lastStreamUrl');
+    }
+
+    // Open in New Tab
+    function openInNewTab() {
+        const url = document.getElementById('streamUrl').value.trim();
+        if (url) {
+            window.open(url, '_blank');
+        }
+    }
+
+    // Load last stream URL on page load
+    document.addEventListener('DOMContentLoaded', function () {
+        const lastUrl = localStorage.getItem('lastStreamUrl');
+        if (lastUrl) {
+            document.getElementById('streamUrl').value = lastUrl;
+        }
+    });
+</script>
+{% endblock %}

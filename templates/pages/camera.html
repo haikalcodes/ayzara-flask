@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+
+{% block title %}Camera Capture - AYZARA{% endblock %}
+{% block page_title %}Camera Capture{% endblock %}
+
+{% block content %}
+<div class="alert alert-info mb-4">
+    <i class="bi bi-info-circle me-2"></i>
+    <strong>Info:</strong> Capture frame dari kamera IP tanpa mengganggu proses recording terminal.
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0"><i class="bi bi-camera me-2"></i>Camera Preview</h5>
+                <button id="captureBtn" onclick="captureFrame()" class="btn btn-primary">
+                    <i class="bi bi-camera me-2"></i>Capture Frame
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="capturePreview" class="text-center bg-glass p-5 rounded">
+                    <i class="bi bi-camera-video" style="font-size: 80px; opacity: 0.3;"></i>
+                    <p class="text-muted mt-3">Klik "Capture Frame" untuk mengambil gambar dari kamera</p>
+                </div>
+                <div id="captureStatus" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title"><i class="bi bi-gear me-2"></i>Info Kamera</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <td class="text-muted">RTSP URL</td>
+                        <td><code class="small">{{ rtsp_url[:40] }}...</code></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Format</td>
+                        <td>JPEG</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Folder</td>
+                        <td><code>uploads/thumbnails/</code></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title"><i class="bi bi-lightbulb me-2"></i>Tips</h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    <li class="mb-2">📷 Capture bisa dilakukan saat recording aktif</li>
+                    <li class="mb-2">💾 Gambar tersimpan otomatis</li>
+                    <li class="mb-2">⬇️ Klik Download untuk menyimpan</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

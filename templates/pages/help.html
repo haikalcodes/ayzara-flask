@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+
+{% block title %}Help - AYZARA{% endblock %}
+{% block page_title %}Help / Manual{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-lg-8">
+        <!-- Getting Started -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title"><i class="bi bi-rocket-takeoff me-2"></i>Getting Started</h5>
+            </div>
+            <div class="card-body">
+                <h6 class="text-primary mb-3">Cara Memulai Recording</h6>
+                <ol class="mb-4">
+                    <li class="mb-2">Jalankan <code>JALANKAN_RECORDER.bat</code> (Terminal mode)</li>
+                    <li class="mb-2">Login dengan nama pegawai</li>
+                    <li class="mb-2">Pilih platform (Shopee/Tokped/dll)</li>
+                    <li class="mb-2">Scan barcode resi pertama → Recording mulai</li>
+                    <li class="mb-2">Scan barcode yang sama → Recording stop</li>
+                </ol>
+
+                <div class="alert alert-info">
+                    <i class="bi bi-lightbulb me-2"></i>
+                    <strong>Tips:</strong> Recording via terminal lebih cepat daripada dashboard!
+                </div>
+            </div>
+        </div>
+
+        <!-- Features -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title"><i class="bi bi-grid me-2"></i>Fitur Dashboard</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-broadcast text-primary me-2"></i>Live Monitoring</h6>
+                        <p class="text-muted small">Monitor status recording secara real-time</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-camera-video text-primary me-2"></i>Camera Capture</h6>
+                        <p class="text-muted small">Ambil foto dari kamera tanpa ganggu recording</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-collection-play text-primary me-2"></i>Video Gallery</h6>
+                        <p class="text-muted small">Lihat semua video dengan filter dan pagination</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-bar-chart text-primary me-2"></i>Statistics</h6>
+                        <p class="text-muted small">Grafik dan statistik rekaman</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-people text-primary me-2"></i>Team Management</h6>
+                        <p class="text-muted small">Kelola data pegawai dengan foto</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-download text-primary me-2"></i>Export</h6>
+                        <p class="text-muted small">Export data ke CSV/PDF</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Commands -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title"><i class="bi bi-terminal me-2"></i>Perintah Terminal</h5>
+            </div>
+            <div class="card-body">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Perintah</th>
+                            <th>Fungsi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>LOGOUT</code></td>
+                            <td>Logout dari session</td>
+                        </tr>
+                        <tr>
+                            <td><code>GANTI</code></td>
+                            <td>Ganti pegawai</td>
+                        </tr>
+                        <tr>
+                            <td><code>PLATFORM</code></td>
+                            <td>Ganti platform (S/T/L/K)</td>
+                        </tr>
+                        <tr>
+                            <td><code>STATUS</code></td>
+                            <td>Tampilkan status session</td>
+                        </tr>
+                        <tr>
+                            <td><code>PERF</code></td>
+                            <td>Tampilkan performance stats</td>
+                        </tr>
+                        <tr>
+                            <td><code>HELP</code></td>
+                            <td>Tampilkan bantuan</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <!-- Quick Links -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title"><i class="bi bi-link-45deg me-2"></i>Quick Links</h5>
+            </div>
+            <div class="card-body">
+                <a href="{{ url_for('monitoring') }}" class="btn btn-glass w-100 mb-2 text-start">
+                    <i class="bi bi-broadcast me-2"></i>Live Monitoring
+                </a>
+                <a href="{{ url_for('camera') }}" class="btn btn-glass w-100 mb-2 text-start">
+                    <i class="bi bi-camera me-2"></i>Camera Capture
+                </a>
+                <a href="{{ url_for('videos') }}" class="btn btn-glass w-100 mb-2 text-start">
+                    <i class="bi bi-play-circle me-2"></i>Video Gallery
+                </a>
+                <a href="{{ url_for('developer') }}" class="btn btn-glass w-100 text-start">
+                    <i class="bi bi-code-slash me-2"></i>Developer Info
+                </a>
+            </div>
+        </div>
+
+        <!-- Contact -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title"><i class="bi bi-chat-dots me-2"></i>Bantuan</h5>
+            </div>
+            <div class="card-body text-center">
+                <p class="text-muted mb-3">Ada pertanyaan atau masalah?</p>
+                <p class="mb-0">
+                    <i class="bi bi-envelope me-2"></i>support@ayzara.com
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
