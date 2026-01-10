@@ -12,9 +12,14 @@
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h3>📋 Daftar Kamera</h3>
-        <button class="btn btn-primary" onclick="showAddCameraModal()">
-            ➕ Tambah Kamera
-        </button>
+        <div class="header-actions">
+            <button class="btn btn-info" onclick="startDiscovery()">
+                🔍 Discovery Kamera
+            </button>
+            <button class="btn btn-primary" onclick="showAddCameraModal()">
+                ➕ Tambah Kamera
+            </button>
+        </div>
     </div>
     <div class="card-body">
         <div class="table-responsive">
@@ -47,7 +52,36 @@
             <button class="modal-close" onclick="closeCameraModal()">&times;</button>
         </div>
         <div class="modal-body">
-            <form id="camera-form">
+            <!-- Discovery Section -->
+            <div id="discovery-section">
+                <div class="discovery-loading text-center py-4" id="discovery-loading" style="display: none;">
+                    <div class="spinner mb-2"></div>
+                    <p>Mencari kamera di jaringan lokal...</p>
+                </div>
+
+                <div id="discovery-results" style="display: none;">
+                    <p class="mb-3 text-secondary" style="font-size: 14px;">Ditemukan beberapa kamera potensial:</p>
+                    <div class="discovery-list mb-4" id="discovery-list">
+                        <!-- Discovered cameras will be listed here -->
+                    </div>
+                    <div class="text-center">
+                        <button class="btn btn-glass w-100 py-3" style="border-style: dashed; border-width: 2px;"
+                            onclick="switchToManualInput()">
+                            ⌨️ Input Manual (Gunakan URL Sendiri)
+                        </button>
+                    </div>
+                </div>
+
+                <div id="discovery-empty" class="text-center py-4" style="display: none;">
+                    <p class="text-muted mb-3">Tidak ada kamera yang ditemukan otomatis.</p>
+                    <button class="btn btn-primary" onclick="switchToManualInput()">
+                        Keyboard Input Manual
+                    </button>
+                </div>
+            </div>
+
+            <!-- Form Section -->
+            <form id="camera-form" style="display: none;">
                 <input type="hidden" id="camera-id" value="">
 
                 <div class="form-group">
@@ -149,13 +183,16 @@
 
     .modal-content {
         position: relative;
-        background: var(--card-bg);
-        border-radius: 12px;
+        background: #0f0f1a;
+        /* Solid background to prevent transparency issues */
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 20px;
         max-width: 500px;
         width: 90%;
         max-height: 90vh;
         overflow-y: auto;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(10px);
     }
 
     .modal-header {
@@ -168,6 +205,12 @@
 
     .modal-header h3 {
         margin: 0;
+        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: 700;
+        font-size: 20px;
     }
 
     .modal-close {
@@ -199,11 +242,12 @@
     .form-control {
         width: 100%;
         padding: 12px;
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        background: var(--bg-color);
-        color: var(--text-color);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.08);
+        color: white;
         font-size: 14px;
+        transition: all 0.2s;
     }
 
     .form-control:focus {
@@ -285,6 +329,78 @@
     .help-section li {
         margin-bottom: 8px;
     }
+
+    /* Discovery UI */
+    .header-actions {
+        display: flex;
+        gap: 10px;
+    }
+
+    .discovery-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    .discovery-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .discovery-item:hover {
+        border-color: var(--primary-color);
+        transform: translateY(-2px);
+    }
+
+    .discovery-info {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .discovery-name {
+        font-weight: 600;
+        font-size: 14px;
+    }
+
+    .discovery-ip {
+        font-size: 12px;
+        color: var(--text-secondary);
+        font-family: monospace;
+    }
+
+    .discovery-source {
+        font-size: 10px;
+        padding: 2px 6px;
+        background: rgba(59, 130, 246, 0.1);
+        color: #3b82f6;
+        border-radius: 4px;
+        width: fit-content;
+        margin-top: 4px;
+    }
+
+    .spinner {
+        width: 30px;
+        height: 30px;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        border-top-color: var(--primary-color);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto;
+    }
+
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
 </style>
 
 <script>
@@ -301,7 +417,7 @@
         // Start periodic status refresh while on this page (background, cached)
         cameraStatusInterval = setInterval(() => {
             refreshAllCameraStatuses();
-        }, 8000); // every 8s
+        }, 30000); // every 30s
 
         // Stop background checks when leaving page
         window.addEventListener('beforeunload', () => {
@@ -330,7 +446,7 @@
                     // Then start interval
                     cameraStatusInterval = setInterval(() => {
                         refreshAllCameraStatuses();
-                    }, 8000);
+                    }, 30000); // every 30s
                 }
             }
         });
@@ -385,9 +501,9 @@
         // Initial status load
         refreshAllCameraStatuses();
 
-        // Auto-refresh status every 15 seconds
+        // Auto-refresh status every 30 seconds
         if (window.statusRefreshInterval) clearInterval(window.statusRefreshInterval);
-        window.statusRefreshInterval = setInterval(refreshAllCameraStatuses, 15000);
+        window.statusRefreshInterval = setInterval(refreshAllCameraStatuses, 30000);
     }
 
 
@@ -443,7 +559,70 @@
         document.getElementById('camera-name').value = '';
         document.getElementById('camera-url').value = '';
         document.getElementById('camera-enabled').checked = true;
+
+        // Default to discovery view
+        startDiscovery();
+
         document.getElementById('camera-modal').style.display = 'flex';
+    }
+
+    function startDiscovery() {
+        document.getElementById('modal-title').textContent = 'Discovery Kamera';
+        document.getElementById('discovery-section').style.display = 'block';
+        document.getElementById('camera-form').style.display = 'none';
+
+        document.getElementById('discovery-loading').style.display = 'block';
+        document.getElementById('discovery-results').style.display = 'none';
+        document.getElementById('discovery-empty').style.display = 'none';
+
+        document.getElementById('camera-modal').style.display = 'flex';
+
+        fetch('/api/cameras/discover')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('discovery-loading').style.display = 'none';
+
+                if (data.success && data.cameras && data.cameras.length > 0) {
+                    renderDiscoveryResults(data.cameras);
+                } else {
+                    document.getElementById('discovery-empty').style.display = 'block';
+                }
+            })
+            .catch(error => {
+                console.error('Discovery error:', error);
+                document.getElementById('discovery-loading').style.display = 'none';
+                document.getElementById('discovery-empty').style.display = 'block';
+            });
+    }
+
+    function renderDiscoveryResults(discovered) {
+        const list = document.getElementById('discovery-list');
+        list.innerHTML = discovered.map(cam => `
+            <div class="discovery-item">
+                <div class="discovery-info">
+                    <span class="discovery-name">${escapeHtml(cam.name)}</span>
+                    <span class="discovery-ip">${cam.ip}</span>
+                    <span class="discovery-source"><i class="bi bi-broadcast"></i> ${cam.source}</span>
+                </div>
+                <button class="btn btn-sm btn-primary px-3" onclick="useDiscoveredCamera('${cam.name}', '${cam.url}')">
+                    <i class="bi bi-plus-lg me-1"></i> Gunakan
+                </button>
+            </div>
+        `).join('');
+
+        document.getElementById('discovery-results').style.display = 'block';
+    }
+
+    function useDiscoveredCamera(name, url) {
+        document.getElementById('camera-name').value = name;
+        document.getElementById('camera-url').value = url;
+        switchToManualInput();
+    }
+
+    function switchToManualInput() {
+        document.getElementById('modal-title').textContent = document.getElementById('camera-id').value ? 'Edit Kamera' : 'Tambah Kamera';
+        document.getElementById('discovery-section').style.display = 'none';
+        document.getElementById('camera-form').style.display = 'block';
     }
 
     // Close modal
@@ -459,6 +638,11 @@
         document.getElementById('camera-name').value = cam.name;
         document.getElementById('camera-url').value = cam.url;
         document.getElementById('camera-enabled').checked = cam.enabled;
+
+        // Hide discovery, show form directly for edit
+        document.getElementById('discovery-section').style.display = 'none';
+        document.getElementById('camera-form').style.display = 'block';
+
         document.getElementById('camera-modal').style.display = 'flex';
     }
 
@@ -529,18 +713,36 @@
     // Delete camera
     function deleteCamera(idx) {
         const cam = cameras[idx];
-        if (!confirm(`Hapus kamera "${cam.name}"?`)) return;
 
-        fetch(`/api/cameras/${cam.id}`, { method: 'DELETE' })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    loadCameras();
-                } else {
-                    alert('Gagal menghapus: ' + data.message);
-                }
-            })
-            .catch(error => alert('Error: ' + error.message));
+        Swal.fire({
+            title: 'Hapus Kamera?',
+            text: `Apakah Anda yakin ingin menghapus kamera "${cam.name}"?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Ya, Hapus',
+            cancelButtonText: 'Batal',
+            reverseButtons: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                fetch(`/api/cameras/${cam.id}`, { method: 'DELETE' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Berhasil',
+                                text: 'Kamera telah dihapus.',
+                                timer: 1500,
+                                showConfirmButton: false
+                            });
+                            loadCameras();
+                        } else {
+                            Swal.fire('Gagal', data.message, 'error');
+                        }
+                    })
+                    .catch(error => Swal.fire('Error', error.message, 'error'));
+            }
+        });
     }
 
     // Form submit
@@ -566,12 +768,26 @@
             .then(result => {
                 if (result.success) {
                     closeCameraModal();
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Berhasil',
+                        text: 'Pengaturan kamera disimpan.',
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
                     loadCameras();
                 } else {
-                    alert('Gagal menyimpan: ' + result.message);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Gagal Menyimpan',
+                        text: result.message,
+                        confirmButtonText: 'Tutup'
+                    });
                 }
             })
-            .catch(error => alert('Error: ' + error.message));
+            .catch(error => {
+                Swal.fire('Error', error.message, 'error');
+            });
     });
 
     // Escape HTML

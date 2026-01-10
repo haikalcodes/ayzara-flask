@@ -28,6 +28,12 @@ from pathlib import Path
 import config
 from pyzbar.pyzbar import decode
 import numpy as np
+import socket
+import uuid
+import select
+import re
+import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ============================================
 # APP INITIALIZATION
@@ -634,6 +640,181 @@ def api_status():
 
 
 # ============================================
+# CAMERA DISCOVERY
+# ============================================
+
+def perform_camera_discovery(timeout=3.0):
+    """
+    Find IP cameras on the local network using WS-Discovery (ONVIF), SSDP,
+    and a fast port scan for DroidCam/others.
+    """
+    discovered_cameras = []
+    seen_ips = set()
+    
+    # helper for socket probe
+    def probe_camera(ip, port):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.3)
+                if s.connect_ex((ip, port)) == 0:
+                    return ip, port
+        except:
+            pass
+        return None
+
+    # Determine local subnet
+    def get_local_ips():
+        ips = []
+        try:
+            # Create a dummy connection to get primary IP
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            primary_ip = s.getsockname()[0]
+            s.close()
+            
+            print(f">>> [Discovery] Detected primary IP: {primary_ip}")
+            
+            if primary_ip:
+                base = primary_ip.rsplit('.', 1)[0]
+                # Scan common range .1 to .254
+                ips = [f"{base}.{i}" for i in range(1, 255)]
+        except Exception as e:
+            print(f">>> [Discovery] Failed to detect primary IP: {e}")
+            # Fallback to a common subnet if 8.8.8.8 fails but we know we are usually on 192.168.x.x
+            ips = []
+            
+        return ips
+
+    # 1. WS-Discovery (ONVIF) Probe
+    ws_discovery_msg = f"""<?xml version="1.0" encoding="utf-8"?>
+    <s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://schemas.xmlsoap.org/ws/2004/08/addressing">
+        <s:Header>
+            <a:Action s:mustUnderstand="1">http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe</a:Action>
+            <a:MessageID>urn:uuid:{uuid.uuid4()}</a:MessageID>
+            <a:ReplyTo><a:Address>http://schemas.xmlsoap.org/ws/2004/08/addressing/role/anonymous</a:Address></a:ReplyTo>
+            <a:To s:mustUnderstand="1">urn:schemas-xmlsoap-org:ws:2005:04:discovery</a:To>
+        </s:Header>
+        <s:Body>
+            <Probe xmlns="http://schemas.xmlsoap.org/ws/2005/04/discovery"><Types>dn:NetworkVideoTransmitter</Types></Probe>
+        </s:Body>
+    </s:Envelope>"""
+
+    # 2. SSDP (UPnP) Probe
+    ssdp_msg = (
+        'M-SEARCH * HTTP/1.1\r\n'
+        'HOST: 239.255.255.250:1900\r\n'
+        'MAN: "ssdp:discover"\r\n'
+        'MX: 3\r\n'
+        'ST: upnp:rootdevice\r\n'
+        '\r\n'
+    )
+
+    # Set up broadcast sockets
+    sockets = []
+    try:
+        onvif_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        onvif_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        onvif_sock.setblocking(False)
+        onvif_sock.sendto(ws_discovery_msg.encode('utf-8'), ('239.255.255.250', 3702))
+        sockets.append(onvif_sock)
+        
+        ssdp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        ssdp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        ssdp_sock.setblocking(False)
+        ssdp_sock.sendto(ssdp_msg.encode('utf-8'), ('239.255.255.250', 1900))
+        sockets.append(ssdp_sock)
+    except:
+        pass
+
+    # 3. Start Subnet Scan (Multithreaded) for DroidCam and common cameras
+    local_ips = get_local_ips()
+    common_ports = [4747, 8080, 554, 8554] # 4747 is DroidCam
+    
+    scan_results = []
+    if local_ips:
+        # Increase workers to 200 for faster coverage
+        with ThreadPoolExecutor(max_workers=200) as executor:
+            futures = []
+            for ip in local_ips:
+                for port in common_ports:
+                    futures.append(executor.submit(probe_camera, ip, port))
+            
+            # Wait for some results (up to 2.5 seconds)
+            try:
+                for future in as_completed(futures, timeout=2.5):
+                    try:
+                        res = future.result()
+                        if res:
+                            scan_results.append(res)
+                    except:
+                        pass
+            except TimeoutError:
+                print(f">>> [Discovery] Subnet scan partially completed (timeout). Found {len(scan_results)} devices.")
+            except Exception as e:
+                print(f">>> [Discovery] Scanner error: {e}")
+
+    # Collect broadcast responses
+    start_time = time.time()
+    while time.time() - start_time < 0.5: # short window for broadcasts
+        readable, _, _ = select.select(sockets, [], [], 0.1)
+        for s in readable:
+            try:
+                data, addr = s.recvfrom(4096)
+                ip = addr[0]
+                if ip in seen_ips: continue
+                
+                resp = data.decode('utf-8', errors='ignore').lower()
+                name = f"Camera {ip}"
+                url = f"rtsp://{ip}:554/stream"
+                source = "WS-Discovery" if s == onvif_sock else "SSDP"
+                
+                if 'networkvideotransmitter' in resp or 'onvif' in resp:
+                    name = f"ONVIF Camera ({ip})"
+                    discovered_cameras.append({'ip': ip, 'name': name, 'url': url, 'source': source})
+                    seen_ips.add(ip)
+                elif 'camera' in resp or 'video' in resp:
+                    name = f"Found Camera ({ip})"
+                    discovered_cameras.append({'ip': ip, 'name': name, 'url': url, 'source': source})
+                    seen_ips.add(ip)
+            except:
+                pass
+
+    # Merge scan results
+    for ip, port in scan_results:
+        if ip in seen_ips: continue
+        
+        name = f"Common Camera ({ip})"
+        url = f"rtsp://{ip}:{port}/stream"
+        source = "Port Scan"
+        
+        if port == 4747:
+            name = f"DroidCam ({ip})"
+            url = f"http://{ip}:4747/mjpegfeed" # Correct for DroidCam
+        elif port == 8080:
+            name = f"IP Webcam ({ip})"
+            url = f"http://{ip}:8080/video"
+            
+        discovered_cameras.append({'ip': ip, 'name': name, 'url': url, 'source': source})
+        seen_ips.add(ip)
+
+    for s in sockets: s.close()
+    return discovered_cameras
+
+@app.route('/api/cameras/discover', methods=['GET'])
+@login_required
+@admin_required
+def api_cameras_discover():
+    """Discover cameras on the local network"""
+    print(">>> [Discovery] Starting camera discovery...")
+    found = perform_camera_discovery()
+    print(f">>> [Discovery] Found {len(found)} potential devices")
+    return jsonify({
+        'success': True,
+        'cameras': found
+    })
+
+
+# ============================================
 # CAMERA MANAGEMENT API
 # ============================================
 
@@ -671,6 +852,11 @@ def api_cameras_add():
     # Load config
     project_cfg = _load_project_config()
     cameras = project_cfg.get('camera_list', [])
+
+    # Check for duplicate URL
+    for cam in cameras:
+        if cam.get('url') == url:
+            return jsonify({'success': False, 'message': f'URL sudah terdaftar dengan nama: {cam.get("name")}'}), 400
     
     # Generate new ID
     max_id = max([c.get('id', 0) for c in cameras], default=0)
@@ -718,8 +904,14 @@ def api_cameras_update(camera_id):
     # Update fields
     if 'name' in data:
         cameras[camera_idx]['name'] = data['name'].strip()
+    
     if 'url' in data:
-        cameras[camera_idx]['url'] = data['url'].strip()
+        new_url = data['url'].strip()
+        # Check for duplicate URL (excluding itself)
+        for cam in cameras:
+            if cam.get('id') != camera_id and cam.get('url') == new_url:
+                return jsonify({'success': False, 'message': f'URL sudah terdaftar dengan nama: {cam.get("name")}'}), 400
+        cameras[camera_idx]['url'] = new_url
     if 'enabled' in data:
         cameras[camera_idx]['enabled'] = data['enabled']
     
@@ -879,11 +1071,11 @@ def background_camera_status_checker():
                     with status_cache_lock:
                         camera_status_cache[url] = status
             
-            # Lebih responsif: cek tiap 10 detik
-            time.sleep(10)
+            # Cek tiap 30 detik agar tidak terlalu membebani sistem
+            time.sleep(30)
         except Exception as e:
             print(f"[Background] Error in status checker: {e}")
-            time.sleep(10)
+            time.sleep(30)
 
 @app.route('/api/cameras/status', methods=['GET'])
 def api_cameras_status():
