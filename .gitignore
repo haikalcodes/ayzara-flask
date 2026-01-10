@@ -34,6 +34,7 @@ instance/
 
 # Project Specific
 recordings/
+recordings
 uploads/
 *.log
 *.db
