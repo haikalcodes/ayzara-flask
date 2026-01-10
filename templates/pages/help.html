@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
-{% block title %}Help - AYZARA{% endblock %}
-{% block page_title %}Help / Manual{% endblock %}
+{% block title %}Bantuan - AYZARA{% endblock %}
+{% block page_title %}Bantuan / Panduan{% endblock %}
 
 {% block content %}
 <div class="row g-4">
@@ -9,21 +9,27 @@
         <!-- Getting Started -->
         <div class="card mb-4">
             <div class="card-header">
-                <h5 class="card-title"><i class="bi bi-rocket-takeoff me-2"></i>Getting Started</h5>
+                <h5 class="card-title"><i class="bi bi-rocket-takeoff me-2"></i>Panduan Memulai</h5>
             </div>
             <div class="card-body">
-                <h6 class="text-primary mb-3">Cara Memulai Recording</h6>
-                <ol class="mb-4">
-                    <li class="mb-2">Jalankan <code>JALANKAN_RECORDER.bat</code> (Terminal mode)</li>
-                    <li class="mb-2">Login dengan nama pegawai</li>
-                    <li class="mb-2">Pilih platform (Shopee/Tokped/dll)</li>
-                    <li class="mb-2">Scan barcode resi pertama → Recording mulai</li>
-                    <li class="mb-2">Scan barcode yang sama → Recording stop</li>
-                </ol>
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <h6 class="text-primary"><i class="bi bi-display me-2"></i>Rekam via Dashboard (Rekomendasi)
+                        </h6>
+                        <ol class="small">
+                            <li>Buka menu <strong>Rekam Packing</strong></li>
+                            <li>Pilih kamera yang ingin digunakan</li>
+                            <li>Pilih platform (Shopee, Tokopedia, dll)</li>
+                            <li>Scan resi (Input otomatis atau deteksi kamera)</li>
+                            <li>Recording akan berhenti otomatis jika resi yang sama di-scan lagi</li>
+                        </ol>
+                    </div>
+                </div>
 
-                <div class="alert alert-info">
-                    <i class="bi bi-lightbulb me-2"></i>
-                    <strong>Tips:</strong> Recording via terminal lebih cepat daripada dashboard!
+                <div class="alert alert-success mt-3 small">
+                    <i class="bi bi-check-circle-fill me-2"></i>
+                    <strong>Penyimpanan Otomatis:</strong> Semua rekaman disimpan secara hirarki berdasarkan
+                    <code>Tanggal > Platform > Nama Pegawai</code>.
                 </div>
             </div>
         </div>
@@ -36,23 +42,24 @@
             <div class="card-body">
                 <div class="row g-4">
                     <div class="col-md-6">
-                        <h6><i class="bi bi-broadcast text-primary me-2"></i>Live Monitoring</h6>
-                        <p class="text-muted small">Monitor status recording secara real-time</p>
+                        <h6><i class="bi bi-broadcast text-primary me-2"></i>Monitoring Langsung</h6>
+                        <p class="text-muted small">Pantau kamera secara real-time dari browser mana saja.</p>
                     </div>
                     <div class="col-md-6">
-                        <h6><i class="bi bi-camera-video text-primary me-2"></i>Camera Capture</h6>
-                        <p class="text-muted small">Ambil foto dari kamera tanpa ganggu recording</p>
+                        <h6><i class="bi bi-camera-video text-primary me-2"></i>Cek Kamera</h6>
+                        <p class="text-muted small">Cek koneksi dan ambil gambar preview kamera (Snapshot).</p>
                     </div>
                     <div class="col-md-6">
-                        <h6><i class="bi bi-collection-play text-primary me-2"></i>Video Gallery</h6>
-                        <p class="text-muted small">Lihat semua video dengan filter dan pagination</p>
+                        <h6><i class="bi bi-collection-play text-primary me-2"></i>Galeri & Backup</h6>
+                        <p class="text-muted small">Video disimpan dengan Metadata JSON dan Hash SHA256 untuk validitas.
+                        </p>
                     </div>
                     <div class="col-md-6">
-                        <h6><i class="bi bi-bar-chart text-primary me-2"></i>Statistics</h6>
-                        <p class="text-muted small">Grafik dan statistik rekaman</p>
+                        <h6><i class="bi bi-gear text-primary me-2"></i>Pengaturan Kamera</h6>
+                        <p class="text-muted small">Tambah/Edit URL RTSP/MJPEG dan tes koneksi secara real-time.</p>
                     </div>
                     <div class="col-md-6">
-                        <h6><i class="bi bi-people text-primary me-2"></i>Team Management</h6>
+                        <h6><i class="bi bi-people text-primary me-2"></i>Manajemen Tim</h6>
                         <p class="text-muted small">Kelola data pegawai dengan foto</p>
                     </div>
                     <div class="col-md-6">
@@ -63,68 +70,27 @@
             </div>
         </div>
 
-        <!-- Commands -->
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title"><i class="bi bi-terminal me-2"></i>Perintah Terminal</h5>
-            </div>
-            <div class="card-body">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Perintah</th>
-                            <th>Fungsi</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><code>LOGOUT</code></td>
-                            <td>Logout dari session</td>
-                        </tr>
-                        <tr>
-                            <td><code>GANTI</code></td>
-                            <td>Ganti pegawai</td>
-                        </tr>
-                        <tr>
-                            <td><code>PLATFORM</code></td>
-                            <td>Ganti platform (S/T/L/K)</td>
-                        </tr>
-                        <tr>
-                            <td><code>STATUS</code></td>
-                            <td>Tampilkan status session</td>
-                        </tr>
-                        <tr>
-                            <td><code>PERF</code></td>
-                            <td>Tampilkan performance stats</td>
-                        </tr>
-                        <tr>
-                            <td><code>HELP</code></td>
-                            <td>Tampilkan bantuan</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+
     </div>
 
     <div class="col-lg-4">
         <!-- Quick Links -->
         <div class="card mb-4">
             <div class="card-header">
-                <h5 class="card-title"><i class="bi bi-link-45deg me-2"></i>Quick Links</h5>
+                <h5 class="card-title"><i class="bi bi-link-45deg me-2"></i>Tautan Cepat</h5>
             </div>
             <div class="card-body">
                 <a href="{{ url_for('monitoring') }}" class="btn btn-glass w-100 mb-2 text-start">
-                    <i class="bi bi-broadcast me-2"></i>Live Monitoring
+                    <i class="bi bi-broadcast me-2"></i>Monitoring Langsung
                 </a>
                 <a href="{{ url_for('camera') }}" class="btn btn-glass w-100 mb-2 text-start">
-                    <i class="bi bi-camera me-2"></i>Camera Capture
+                    <i class="bi bi-camera me-2"></i>Ambil Gambar
                 </a>
                 <a href="{{ url_for('videos') }}" class="btn btn-glass w-100 mb-2 text-start">
-                    <i class="bi bi-play-circle me-2"></i>Video Gallery
+                    <i class="bi bi-play-circle me-2"></i>Galeri Video
                 </a>
                 <a href="{{ url_for('developer') }}" class="btn btn-glass w-100 text-start">
-                    <i class="bi bi-code-slash me-2"></i>Developer Info
+                    <i class="bi bi-code-slash me-2"></i>Informasi Pengembang
                 </a>
             </div>
         </div>

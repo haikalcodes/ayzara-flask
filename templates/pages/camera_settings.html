@@ -7,17 +7,6 @@
     <p>Kelola daftar kamera IP untuk recording</p>
 </div>
 
-<!-- Status Kamera Aktif -->
-<div class="card mb-4">
-    <div class="card-header">
-        <h3>🟢 Kamera Aktif</h3>
-    </div>
-    <div class="card-body">
-        <div id="active-camera-info">
-            <p class="text-muted">Memuat informasi kamera...</p>
-        </div>
-    </div>
-</div>
 
 <!-- Daftar Kamera -->
 <div class="card mb-4">
@@ -35,7 +24,7 @@
                         <th>Status</th>
                         <th>Nama</th>
                         <th>URL</th>
-                        <th>Enabled</th>
+                        <th>Aktif</th>
                         <th>Aksi</th>
                     </tr>
                 </thead>
@@ -109,25 +98,27 @@
             <h4>Cara Menambah Kamera:</h4>
             <ol>
                 <li>Klik tombol "Tambah Kamera"</li>
-                <li>Isi nama kamera (untuk identifikasi)</li>
-                <li>Masukkan URL RTSP kamera</li>
-                <li>Klik "Test Koneksi" untuk memastikan kamera terhubung</li>
-                <li>Klik "Simpan" untuk menyimpan</li>
+                <li>Isi nama kamera (sebagai penanda, misal: "Kamera Gudang 1")</li>
+                <li>Masukkan URL RTSP atau MJPEG kamera</li>
+                <li>Klik "Test Koneksi" untuk memastikan kamera terjangkau oleh server</li>
+                <li>Klik "Simpan" untuk mengaktifkan kamera dalam dashboard</li>
             </ol>
 
-            <h4>Cara Kerja Auto-Fallback:</h4>
+            <h4>Keterangan Status:</h4>
             <ul>
-                <li>Saat recorder dimulai, sistem akan mencoba connect ke setiap kamera</li>
-                <li>Kamera dicoba dari atas ke bawah (urutan di tabel)</li>
-                <li>Kamera pertama yang berhasil connect akan digunakan</li>
-                <li>Jika kamera aktif disconnect, restart recorder untuk auto-switch</li>
+                <li><strong>Online (Probed):</strong> Kamera berhasil dihubungi secara real-time via FFprobe/Socket.
+                </li>
+                <li><strong>Offline:</strong> Kamera tidak merespon atau URL salah. Gunakan tombol "Test" untuk refresh
+                    paksa.</li>
+                <li><strong>In Use:</strong> Kamera sedang digunakan oleh user tertentu untuk preview atau recording.
+                </li>
             </ul>
 
             <h4>Tips:</h4>
             <ul>
-                <li>Simpan beberapa kamera dengan WiFi berbeda untuk backup</li>
-                <li>Disable kamera yang tidak digunakan untuk mempercepat startup</li>
-                <li>Gunakan "Test Koneksi" untuk memastikan URL benar</li>
+                <li>Simpan beberapa kamera sebagai backup jika salah satu WiFi mati.</li>
+                <li>Gunakan <strong>Metode Input</strong> manual di halaman Rekam jika scanner fisik bermasalah.</li>
+                <li>Status kamera akan di-refresh otomatis setiap 15 detik di halaman ini.</li>
             </ul>
         </div>
     </div>
@@ -300,9 +291,49 @@
     // Global variables
     let cameras = [];
 
+    let cameraStatusInterval = null;
+
     // Load cameras on page load
     document.addEventListener('DOMContentLoaded', function () {
+        console.log('>>> [Camera Settings] Page loaded, starting background status checks');
         loadCameras();
+
+        // Start periodic status refresh while on this page (background, cached)
+        cameraStatusInterval = setInterval(() => {
+            refreshAllCameraStatuses();
+        }, 8000); // every 8s
+
+        // Stop background checks when leaving page
+        window.addEventListener('beforeunload', () => {
+            console.log('>>> [Camera Settings] Page unloading, stopping background checks');
+            if (cameraStatusInterval) {
+                clearInterval(cameraStatusInterval);
+                cameraStatusInterval = null;
+            }
+        });
+
+        // Pause/resume background checks based on page visibility
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                // Page is hidden (user switched tab/minimized)
+                console.log('>>> [Camera Settings] Page hidden, pausing background checks');
+                if (cameraStatusInterval) {
+                    clearInterval(cameraStatusInterval);
+                    cameraStatusInterval = null;
+                }
+            } else {
+                // Page is visible again
+                console.log('>>> [Camera Settings] Page visible, resuming background checks');
+                if (!cameraStatusInterval) {
+                    // Refresh immediately
+                    refreshAllCameraStatuses();
+                    // Then start interval
+                    cameraStatusInterval = setInterval(() => {
+                        refreshAllCameraStatuses();
+                    }, 8000);
+                }
+            }
+        });
     });
 
     // Load camera list from API
@@ -312,7 +343,6 @@
             .then(data => {
                 cameras = data.cameras || [];
                 renderCameraList();
-                renderActiveCameraInfo(data.active_index);
             })
             .catch(error => {
                 console.error('Error loading cameras:', error);
@@ -334,7 +364,7 @@
         <tr data-id="${cam.id}">
             <td>
                 <span class="status-badge status-checking" id="status-${idx}">
-                    ⏳ Checking...
+                    ⏳ Mengecek...
                 </span>
             </td>
             <td><strong>${escapeHtml(cam.name)}</strong></td>
@@ -352,56 +382,57 @@
         </tr>
     `).join('');
 
-        // Check status for each camera
-        cameras.forEach((cam, idx) => {
-            checkCameraStatus(cam.url, idx);
-        });
+        // Initial status load
+        refreshAllCameraStatuses();
+
+        // Auto-refresh status every 15 seconds
+        if (window.statusRefreshInterval) clearInterval(window.statusRefreshInterval);
+        window.statusRefreshInterval = setInterval(refreshAllCameraStatuses, 15000);
     }
 
-    // Render active camera info
-    function renderActiveCameraInfo(activeIndex) {
-        const container = document.getElementById('active-camera-info');
 
-        if (activeIndex >= 0 && activeIndex < cameras.length) {
-            const cam = cameras[activeIndex];
-            container.innerHTML = `
-            <div class="d-flex align-items-center gap-3">
-                <span class="status-badge status-online">🟢 Terhubung</span>
-                <strong>${escapeHtml(cam.name)}</strong>
-                <span class="url-text">${escapeHtml(cam.url)}</span>
-            </div>
-        `;
-        } else {
-            container.innerHTML = '<p class="text-warning">⚠️ Tidak ada kamera yang aktif</p>';
-        }
-    }
+    // Refresh all camera statuses from cache (non-blocking)
+    function refreshAllCameraStatuses() {
+        if (!cameras || cameras.length === 0) return;
 
-    // Check camera status
-    function checkCameraStatus(url, idx) {
-        fetch('/api/cameras/test', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: url })
-        })
+        fetch('/api/cameras/status')
             .then(response => response.json())
             .then(data => {
-                const badge = document.getElementById(`status-${idx}`);
-                if (badge) {
-                    if (data.success) {
-                        badge.className = 'status-badge status-online';
-                        badge.innerHTML = '🟢 Online';
+                const statusMap = data.status || {};
+
+                cameras.forEach((cam, idx) => {
+                    const badge = document.getElementById(`status-${idx}`);
+                    if (!badge) return;
+
+                    const cameraStatus = statusMap[cam.url] || Object.values(statusMap).find(s => s.url === cam.url);
+
+                    if (cameraStatus) {
+                        if (cameraStatus.online) {
+                            badge.className = 'status-badge status-online';
+                            if (cameraStatus.in_use && cameraStatus.in_use_by) {
+                                badge.innerHTML = `🟢 Online<br><small>Dipakai oleh ${escapeHtml(cameraStatus.in_use_by)}${cameraStatus.purpose ? ' (' + escapeHtml(cameraStatus.purpose) + ')' : ''}</small>`;
+                            } else {
+                                badge.innerHTML = '🟢 Online';
+                            }
+                        } else {
+                            badge.className = 'status-badge status-offline';
+                            badge.innerHTML = '🔴 Offline';
+                        }
                     } else {
-                        badge.className = 'status-badge status-offline';
-                        badge.innerHTML = '🔴 Offline';
+                        // Status not yet checked by background worker
+                        badge.className = 'status-badge status-checking';
+                        badge.innerHTML = '⏳ Menunggu...';
                     }
-                }
+                });
             })
             .catch(() => {
-                const badge = document.getElementById(`status-${idx}`);
-                if (badge) {
-                    badge.className = 'status-badge status-offline';
-                    badge.innerHTML = '❓ Unknown';
-                }
+                cameras.forEach((cam, idx) => {
+                    const badge = document.getElementById(`status-${idx}`);
+                    if (badge) {
+                        badge.className = 'status-badge status-offline';
+                        badge.innerHTML = '❓ Tidak Diketahui';
+                    }
+                });
             });
     }
 
@@ -441,7 +472,7 @@
 
         const btn = event.target;
         btn.disabled = true;
-        btn.textContent = '⏳ Testing...';
+        btn.textContent = '⏳ Mengetes...';
 
         fetch('/api/cameras/test', {
             method: 'POST',
@@ -453,6 +484,7 @@
                 if (data.success) {
                     alert('✅ Koneksi berhasil! Kamera dapat digunakan.');
                 } else {
+                    console.log(data)
                     alert('❌ Koneksi gagal: ' + data.message);
                 }
             })
@@ -471,9 +503,27 @@
         const badge = document.getElementById(`status-${idx}`);
 
         badge.className = 'status-badge status-checking';
-        badge.innerHTML = '⏳ Testing...';
+        badge.innerHTML = '⏳ Mengetes...';
 
-        checkCameraStatus(cam.url, idx);
+        fetch('/api/cameras/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: cam.url })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    badge.className = 'status-badge status-online';
+                    badge.innerHTML = '🟢 Online';
+                } else {
+                    badge.className = 'status-badge status-offline';
+                    badge.innerHTML = '🔴 Offline';
+                }
+            })
+            .catch(error => {
+                badge.className = 'status-badge status-offline';
+                badge.innerHTML = '❓ Error';
+            });
     }
 
     // Delete camera

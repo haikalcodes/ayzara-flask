@@ -1,0 +1,24 @@
+{
+  "bukti_rekaman": {
+    "versi": "1.0",
+    "brand": "AYZARA",
+    "dibuat_oleh": "Packing Recording System"
+  },
+  "informasi_paket": {
+    "nomor_resi": "202222",
+    "platform": "LAINNYA",
+    "pegawai": "admin"
+  },
+  "informasi_video": {
+    "nama_file": "202222_LAINNYA_AYZARA_001.mp4",
+    "durasi_detik": 8,
+    "ukuran_kb": 1795,
+    "sha256_hash": "9d72e2b166d4042cef92d8588dfdaa689442a4f1f0c4ebfd2d92ebae9ca6567c"
+  },
+  "waktu": {
+    "rekaman_mulai": "2026-01-06 17:22:37",
+    "rekaman_selesai": "2026-01-06 17:22:46",
+    "zona_waktu": "Asia/Jakarta (WIB)"
+  },
+  "catatan": "File ini adalah bukti otentik rekaman packing. Hash SHA256 dapat digunakan untuk memverifikasi keaslian video."
+}

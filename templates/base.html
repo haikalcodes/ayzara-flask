@@ -23,8 +23,38 @@
     <!-- Socket.IO -->
     <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
 
-    <!-- Custom CSS -->
-    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- Custom CSS with cache buster -->
+    <link href="{{ url_for('static', filename='css/style.css') }}?v={{ range(1000, 9999) | random }}" rel="stylesheet">
+
+    <!-- Global SweetAlert2 Dark Theme Overrides -->
+    <style>
+        .swal2-popup {
+            background-color: #0a0a12 !important;
+            /* var(--bg-darker) fallback */
+            color: #ffffff !important;
+            /* var(--text-primary) fallback */
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 16px !important;
+        }
+
+        .swal2-title,
+        .swal2-html-container,
+        .swal2-content {
+            color: #ffffff !important;
+        }
+
+        .swal2-confirm.swal2-styled {
+            background: linear-gradient(135deg, #FF6B35 0%, #E55A2B 100%) !important;
+            border-radius: 10px !important;
+        }
+
+        .swal2-timer-progress-bar {
+            background: #FF6B35 !important;
+        }
+    </style>
 
     {% block extra_head %}{% endblock %}
 </head>
@@ -41,6 +71,7 @@
         </div>
 
         <div class="sidebar-menu">
+            {% if current_user.is_admin() %}
             <a href="{{ url_for('index') }}" class="menu-item {% if request.endpoint == 'index' %}active{% endif %}">
                 <i class="bi bi-grid-1x2"></i>
                 <span>Dashboard</span>
@@ -49,30 +80,39 @@
             <a href="{{ url_for('monitoring') }}"
                 class="menu-item {% if request.endpoint == 'monitoring' %}active{% endif %}">
                 <i class="bi bi-broadcast"></i>
-                <span>Live Monitoring</span>
+                <span>Monitoring Langsung</span>
                 <span class="status-dot" id="recording-dot"></span>
+            </a>
+            {% endif %}
+
+            <a href="{{ url_for('rekam_packing') }}"
+                class="menu-item {% if request.endpoint == 'rekam_packing' %}active{% endif %}">
+                <i class="bi bi-box-seam"></i>
+                <span>Rekam Packing</span>
             </a>
 
             <a href="{{ url_for('camera') }}" class="menu-item {% if request.endpoint == 'camera' %}active{% endif %}">
                 <i class="bi bi-camera-video"></i>
-                <span>Camera Capture</span>
+                <span>Ambil Gambar</span>
             </a>
 
             <a href="{{ url_for('videos') }}" class="menu-item {% if request.endpoint == 'videos' %}active{% endif %}">
                 <i class="bi bi-collection-play"></i>
-                <span>Video Gallery</span>
+                <span>Galeri Video</span>
             </a>
 
+            {% if current_user.is_admin() %}
             <a href="{{ url_for('statistics') }}"
                 class="menu-item {% if request.endpoint == 'statistics' %}active{% endif %}">
                 <i class="bi bi-bar-chart"></i>
-                <span>Statistics</span>
+                <span>Statistik</span>
             </a>
 
             <a href="{{ url_for('team') }}" class="menu-item {% if request.endpoint == 'team' %}active{% endif %}">
                 <i class="bi bi-people"></i>
-                <span>Team</span>
+                <span>Tim</span>
             </a>
+            {% endif %}
 
             <a href="{{ url_for('camera_settings') }}"
                 class="menu-item {% if request.endpoint == 'camera_settings' %}active{% endif %}">
@@ -86,56 +126,68 @@
             <a href="{{ url_for('help_page') }}"
                 class="menu-item {% if request.endpoint == 'help_page' %}active{% endif %}">
                 <i class="bi bi-question-circle"></i>
-                <span>Help / Manual</span>
+                <span>Bantuan / Panduan</span>
             </a>
 
             <a href="{{ url_for('developer') }}"
                 class="menu-item {% if request.endpoint == 'developer' %}active{% endif %}">
                 <i class="bi bi-code-slash"></i>
-                <span>Developer</span>
+                <span>Pengembang</span>
             </a>
 
             <div class="menu-divider"></div>
-            <div class="menu-label">COMING SOON</div>
+            <div class="menu-label">SEGERA HADIR</div>
 
             <a href="{{ url_for('coming_soon', feature='track-resi') }}" class="menu-item coming-soon">
                 <i class="bi bi-geo-alt"></i>
-                <span>Track Resi</span>
-                <span class="badge-soon">Soon</span>
+                <span>Lacak Resi</span>
+                <span class="badge-soon">Segera</span>
             </a>
 
             <a href="{{ url_for('coming_soon', feature='ai-features') }}" class="menu-item coming-soon">
                 <i class="bi bi-robot"></i>
-                <span>AI Features</span>
-                <span class="badge-soon">Soon</span>
+                <span>Fitur AI</span>
+                <span class="badge-soon">Segera</span>
             </a>
 
             <a href="{{ url_for('coming_soon', feature='edit-rekaman') }}" class="menu-item coming-soon">
                 <i class="bi bi-scissors"></i>
                 <span>Edit Rekaman</span>
-                <span class="badge-soon">Soon</span>
+                <span class="badge-soon">Segera</span>
             </a>
 
             <a href="{{ url_for('coming_soon', feature='boost-ads') }}" class="menu-item coming-soon">
                 <i class="bi bi-megaphone"></i>
-                <span>Boost Ads</span>
-                <span class="badge-soon">Soon</span>
+                <span>Iklan Boost</span>
+                <span class="badge-soon">Segera</span>
             </a>
 
             <a href="{{ url_for('coming_soon', feature='competitor') }}" class="menu-item coming-soon">
                 <i class="bi bi-search"></i>
-                <span>Competitor</span>
-                <span class="badge-soon">Soon</span>
+                <span>Kompetitor</span>
+                <span class="badge-soon">Segera</span>
             </a>
 
             <a href="{{ url_for('coming_soon', feature='ai-tryon') }}" class="menu-item coming-soon">
                 <i class="bi bi-person-bounding-box"></i>
                 <span>AI TRY ON</span>
-                <span class="badge-soon">Soon</span>
+                <span class="badge-soon">Segera</span>
             </a>
         </div>
 
         <div class="sidebar-footer">
+            <div class="menu-item" style="cursor: default; opacity: 0.8;">
+                <i class="bi bi-person-circle"></i>
+                <span>{{ current_user.username }}</span>
+            </div>
+            <a href="{{ url_for('change_password') }}" class="menu-item">
+                <i class="bi bi-key"></i>
+                <span>Ubah Password</span>
+            </a>
+            <a href="{{ url_for('logout') }}" class="menu-item" style="color: #dc3545;">
+                <i class="bi bi-box-arrow-right"></i>
+                <span>Logout</span>
+            </a>
             <div class="footer-info">
                 <small>100% FREE • AYZARA</small>
             </div>
@@ -157,7 +209,7 @@
             <div class="top-bar-actions">
                 <div class="recording-indicator" id="globalRecordingIndicator" style="display: none;">
                     <span class="recording-pulse"></span>
-                    <span>RECORDING</span>
+                    <span>MEREKAM</span>
                 </div>
 
                 <div class="datetime" id="datetime"></div>

@@ -17,7 +17,7 @@ SQLALCHEMY_DATABASE_URI = f"sqlite:///{DATABASE_FILE}"
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 # Recording folder
-RECORDINGS_FOLDER = PROJECT_DIR / "recordings"
+RECORDINGS_FOLDER = BASE_DIR / "recordings"
 
 # Upload folders
 UPLOAD_FOLDER = BASE_DIR / "uploads"
@@ -28,14 +28,14 @@ THUMBNAILS_FOLDER = UPLOAD_FOLDER / "thumbnails"
 STATIC_FOLDER = BASE_DIR / "static"
 
 # Config file (dari project utama)
-CONFIG_FILE = PROJECT_DIR / "config.json"
+CONFIG_FILE = BASE_DIR / "config.json"
 
 # Flask settings
 SECRET_KEY = os.environ.get('SECRET_KEY', 'ayzara-flask-secret-key-2026')
 DEBUG = True
 
 # Camera/RTSP settings (akan di-load dari config.json)
-DEFAULT_RTSP_URL = "rtsp://admin:@192.168.100.19:8554/Streaming/Channels/101?tcp"
+DEFAULT_RTSP_URL = "http://192.168.43.1:4747/mjpegfeed"
 FFMPEG_PATH = "ffmpeg"
 
 # Platform configuration
@@ -57,5 +57,5 @@ APP_AUTHOR = "AYZARA COLLECTIONS"
 BRAND_NAME = "AYZARA"
 
 # Create directories if not exist
-for folder in [UPLOAD_FOLDER, PHOTOS_FOLDER, THUMBNAILS_FOLDER]:
+for folder in [UPLOAD_FOLDER, PHOTOS_FOLDER, THUMBNAILS_FOLDER, RECORDINGS_FOLDER]:
     folder.mkdir(parents=True, exist_ok=True)

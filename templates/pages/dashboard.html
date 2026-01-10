@@ -31,7 +31,7 @@
         <div class="stat-card info">
             <div class="stat-icon">💾</div>
             <div class="stat-value" id="stat-size">{{ stats.total_size_mb }} MB</div>
-            <div class="stat-label">Total Size</div>
+            <div class="stat-label">Total Ukuran</div>
         </div>
     </div>
 </div>
@@ -41,23 +41,26 @@
     <div class="col-md-4">
         <div class="card h-100">
             <div class="card-header">
-                <h5 class="card-title"><i class="bi bi-broadcast me-2"></i>Status Recording</h5>
+                <h5 class="card-title"><i class="bi bi-broadcast me-2"></i>Status Perekaman</h5>
             </div>
             <div class="card-body text-center">
                 {% if active_recording %}
                 <div class="mb-3">
                     <span class="recording-pulse" style="width: 20px; height: 20px; display: inline-block;"></span>
                 </div>
-                <h4 class="text-danger mb-3">RECORDING</h4>
-                <p class="text-muted mb-0">Recording Packing sedang Berlangsung</p>
+                <h4 class="text-danger mb-3">SEDANG MEREKAM</h4>
+                <p class="text-muted mb-0">Recording packing sedang berlangsung</p>
+                <a href="{{ url_for('rekam_packing') }}" class="btn btn-danger mt-3">
+                    <i class="bi bi-eye me-2"></i>Lihat Proses Rekam
+                </a>
                 {% else %}
                 <div class="mb-3">
                     <i class="bi bi-check-circle-fill text-success" style="font-size: 48px;"></i>
                 </div>
                 <h4 class="text-success">SIAP</h4>
                 <p class="text-muted mb-0">Tidak ada recording aktif</p>
-                <a href="{{ url_for('monitoring') }}" class="btn btn-primary mt-3">
-                    <i class="bi bi-broadcast me-2"></i>Buka Live Monitor
+                <a href="{{ url_for('rekam_packing') }}" class="btn btn-primary mt-3">
+                    <i class="bi bi-plus-circle me-2"></i>Mulai Rekam Paket
                 </a>
                 {% endif %}
             </div>
@@ -92,7 +95,7 @@
                                 {% if rec.status == 'COMPLETED' %}
                                 <span class="badge badge-status-completed">✅ Selesai</span>
                                 {% elif rec.status == 'RECORDING' %}
-                                <span class="badge badge-status-recording">🔴 Recording</span>
+                                <span class="badge badge-status-recording">🔴 Merekam</span>
                                 {% else %}
                                 <span class="badge badge-status-error">⚠️ Error</span>
                                 {% endif %}
@@ -117,33 +120,31 @@
     <div class="col-md-3">
         <a href="{{ url_for('camera') }}" class="card text-center p-4 text-decoration-none">
             <div class="stat-icon">📷</div>
-            <h6 class="mb-0">Camera Capture</h6>
+            <h6 class="mb-0">Ambil Gambar</h6>
         </a>
     </div>
     <div class="col-md-3">
         <a href="{{ url_for('videos') }}" class="card text-center p-4 text-decoration-none">
             <div class="stat-icon">🎬</div>
-            <h6 class="mb-0">Video Gallery</h6>
+            <h6 class="mb-0">Galeri Video</h6>
         </a>
     </div>
     <div class="col-md-3">
         <a href="{{ url_for('statistics') }}" class="card text-center p-4 text-decoration-none">
             <div class="stat-icon">📊</div>
-            <h6 class="mb-0">Statistics</h6>
+            <h6 class="mb-0">Statistik</h6>
         </a>
     </div>
     <div class="col-md-3">
         <a href="{{ url_for('team') }}" class="card text-center p-4 text-decoration-none">
             <div class="stat-icon">👥</div>
-            <h6 class="mb-0">Team</h6>
+            <h6 class="mb-0">Tim</h6>
         </a>
     </div>
 </div>
 
 <!-- Info Banner -->
-<div class="alert alert-info mt-4" role="alert">
+<div class="alert alert-info mt-4" style="display: none;" role="alert">
     <i class="bi bi-info-circle me-2"></i>
-    <strong>Tips:</strong> Gunakan <code>JALANKAN_RECORDER.bat</code> (Terminal) untuk recording dengan kecepatan
-    maksimal!
 </div>
 {% endblock %}

@@ -11,19 +11,48 @@
 let socket;
 
 function initSocket() {
-    socket = io();
+    console.log('[SocketIO] Initializing socket connection...');
+    window.socket = io({
+        transports: ['websocket', 'polling'],
+        upgrade: true,
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 10
+    });
+    socket = window.socket; // Maintain local reference
 
     socket.on('connect', () => {
-        console.log('[SocketIO] Connected');
+        console.log('[SocketIO] Connected successfully! Socket ID:', socket.id);
         socket.emit('request_status');
     });
+
+    socket.on('reconnect', (attemptNumber) => {
+        console.log('[SocketIO] Reconnected after', attemptNumber, 'attempts');
+    });
+
+    socket.on('reconnect_attempt', (attemptNumber) => {
+        console.log('[SocketIO] Reconnection attempt', attemptNumber);
+    });
+
+    socket.on('reconnect_error', (error) => {
+        console.error('[SocketIO] Reconnection error:', error);
+    });
+
+    // Debug: Log all emits
+    const originalEmit = socket.emit;
+    socket.emit = function () {
+        if (arguments[0] !== 'request_status') {
+            console.log('>>> [Socket] Emitting:', arguments[0], arguments[1]);
+        }
+        return originalEmit.apply(this, arguments);
+    };
 
     socket.on('status_update', (data) => {
         updateRecordingStatus(data);
     });
 
-    socket.on('disconnect', () => {
-        console.log('[SocketIO] Disconnected');
+    socket.on('disconnect', (reason) => {
+        console.log('[SocketIO] Disconnected. Reason:', reason);
     });
 }
 
@@ -128,16 +157,35 @@ async function captureFrame() {
 
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Capturing...';
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Menangkap Gambar...';
     }
 
     if (status) {
-        status.innerHTML = '<div class="alert alert-info">📷 Capturing frame...</div>';
+        status.innerHTML = '<div class="alert alert-info"><span class="spinner-border spinner-border-sm me-2"></span>📷 Menghubungkan ke kamera...</div>';
     }
 
     try {
+        // Get selected camera URL if available
+        const select = document.getElementById('cameraSelect');
+        const url = select ? select.value : null;
+
+        if (select && !url) {
+            alert('Silakan pilih kamera terlebih dahulu');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-camera me-2"></i>Capture';
+            }
+            if (status) status.innerHTML = '';
+            return;
+        }
+
+        const body = url ? JSON.stringify({ url: url }) : null;
+        const headers = url ? { 'Content-Type': 'application/json' } : {};
+
         const response = await fetch('/api/camera/capture', {
-            method: 'POST'
+            method: 'POST',
+            headers: headers,
+            body: body
         });
 
         const data = await response.json();
@@ -151,17 +199,20 @@ async function captureFrame() {
                             <i class="bi bi-download me-2"></i>Download
                         </a>
                         <button onclick="captureFrame()" class="btn btn-glass">
-                            <i class="bi bi-arrow-repeat me-2"></i>Capture Again
+                            <i class="bi bi-arrow-repeat me-2"></i>Capture Lagi
                         </button>
                     </div>
                 `;
             }
             if (status) {
-                status.innerHTML = '<div class="alert alert-success">✅ Frame captured successfully!</div>';
+                status.innerHTML = '<div class="alert alert-success">✅ Gambar berhasil ditangkap!</div>';
             }
         } else {
             if (status) {
-                status.innerHTML = `<div class="alert alert-danger">❌ Error: ${data.error}</div>`;
+                console.log(data);
+                // status.innerHTML = `<div class="alert alert-danger">❌ Error: ${data.error}</div>`;
+                status.innerHTML = `<div class="alert alert-danger">❌ Error: Kamera tidak terhubung!</div>`;
+
             }
         }
     } catch (error) {
@@ -172,7 +223,7 @@ async function captureFrame() {
 
     if (btn) {
         btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-camera me-2"></i>Capture Frame';
+        btn.innerHTML = '<i class="bi bi-camera me-2"></i>Capture';
     }
 }
 

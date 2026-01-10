@@ -1,43 +1,125 @@
 {% extends 'base.html' %}
 
-{% block title %}Video Gallery - AYZARA{% endblock %}
-{% block page_title %}Video Gallery{% endblock %}
+{% block title %}Galeri Video - AYZARA{% endblock %}
+{% block page_title %}Galeri Video{% endblock %}
 
 {% block content %}
 <!-- Filters -->
 <div class="card mb-4">
     <div class="card-body">
-        <form action="{{ url_for('videos') }}" method="get" class="row g-3 align-items-end">
-            <div class="col-md-4">
-                <label class="form-label">Cari Resi/Pegawai</label>
-                <input type="text" name="search" class="form-control" value="{{ search }}"
-                    placeholder="Ketik untuk cari...">
+        <form action="{{ url_for('videos') }}" method="get" id="searchForm" class="row g-3 align-items-end">
+            <!-- Input Method Selection -->
+            <div class="col-12">
+                <label class="form-label">Metode Pencarian Resi</label>
+                <div class="btn-group w-100" role="group">
+                    <input type="radio" class="btn-check" name="search-method" id="method-manual" value="manual"
+                        checked>
+                    <label class="btn btn-outline-primary" for="method-manual">
+                        <i class="bi bi-keyboard me-2"></i>Ketik Manual
+                    </label>
+
+                    <input type="radio" class="btn-check" name="search-method" id="method-scanner" value="scanner">
+                    <label class="btn btn-outline-primary" for="method-scanner">
+                        <i class="bi bi-upc-scan me-2"></i>Scanner Barcode
+                    </label>
+
+                    <input type="radio" class="btn-check" name="search-method" id="method-camera" value="camera">
+                    <label class="btn btn-outline-primary" for="method-camera">
+                        <i class="bi bi-camera me-2"></i>Deteksi Kamera
+                    </label>
+                </div>
             </div>
+
+            <!-- Camera Feed (Hidden by default) -->
+            <div class="col-12 d-none" id="camera-search-section">
+                <div class="card bg-dark">
+                    <div class="card-body p-0">
+                        <div class="position-relative" style="max-height: 200px; background: #000;">
+                            <img id="camera-search-feed" src="" class="img-fluid w-100"
+                                style="display: none; max-height: 200px; object-fit: contain;">
+                            <div id="camera-search-placeholder"
+                                class="d-flex flex-column justify-content-center align-items-center h-100 text-muted p-4"
+                                style="min-height: 200px;">
+                                <i class="fs-1 mb-2">📷</i>
+                                <h6>Pilih Kamera</h6>
+                                <p class="small mb-0">Pilih kamera di bawah untuk mulai scan</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="row g-2" id="camera-selector-row">
+                            <div class="col-md-8">
+                                <select id="camera-search-select" class="form-select">
+                                    <option value="">Pilih kamera...</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <button type="button" class="btn btn-success w-100" id="btn-connect-camera-search"
+                                    onclick="connectCameraForSearch()">
+                                    <i class="bi bi-play-circle me-2"></i>Hubungkan Kamera
+                                </button>
+                            </div>
+                        </div>
+                        <div class="row g-2 mt-2 d-none" id="camera-scanning-controls"
+                            style="position: relative; z-index: 1000;">
+                            <div class="col-12">
+                                <button type="button" class="btn btn-danger w-100" id="btn-cancel-camera-search"
+                                    onclick="cancelCameraSearch()">
+                                    <i class="bi bi-x-lg me-2"></i>Batal & Tutup Kamera
+                                </button>
+                            </div>
+                        </div>
+                        <div id="camera-search-status" class="mt-2 text-center text-muted">
+                            Pilih kamera dan klik Hubungkan Kamera
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="col-md-3">
+                <label class="form-label">Cari Resi</label>
+                <div class="input-group">
+                    <input type="text" name="search" class="form-control" value="{{ search }}" id="searchInput"
+                        placeholder="Scan/Ketik Resi..." autocomplete="off">
+                    <button class="btn btn-outline-secondary" type="button" onclick="clearSearch()" title="Clear">
+                        <i class="bi bi-x-circle"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label">Platform</label>
-                <select name="platform" class="form-control">
-                    <option value="">Semua Platform</option>
+                <select name="platform" class="form-select">
+                    <option value="">Semua</option>
                     {% for key in platforms.keys() %}
                     <option value="{{ key }}" {% if key==current_platform %}selected{% endif %}>{{ key }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-3">
-                <button type="submit" class="btn btn-primary w-100">
-                    <i class="bi bi-search me-2"></i>Filter
-                </button>
+            <div class="col-md-2">
+                <label class="form-label">Pegawai</label>
+                <select name="pegawai" class="form-select">
+                    <option value="">Semua</option>
+                    {% for p in pegawai_list %}
+                    <option value="{{ p }}" {% if p==current_pegawai %}selected{% endif %}>{{ p }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-funnel me-2"></i>Filter
+                </button>
+            </div>
+            <div class="col-md-3">
                 <div class="btn-group w-100" role="group">
                     <button type="button" onclick="exportCSV()" class="btn btn-glass" title="Export CSV">
                         <i class="bi bi-filetype-csv"></i>
                     </button>
-                    <button type="button" onclick="exportPDF()" class="btn btn-glass" title="Print Report">
-                        <i class="bi bi-printer"></i>
+                    <button type="button" onclick="exportPDF()" class="btn btn-glass" title="Export PDF">
+                        <i class="bi bi-file-earmark-pdf"></i>
                     </button>
                     <button type="button" onclick="generateThumbnails()" class="btn btn-glass"
-                        title="Generate Thumbnails" id="btnGenerateThumbs">
-                        <i class="bi bi-image"></i>
+                        title="Regenerate Thumbnails" id="btnGenerateThumbs">
+                        <i class="bi bi-images"></i>
                     </button>
                 </div>
             </div>
@@ -52,8 +134,14 @@
     {% set video_relative = video_path.replace('recordings/', '') if video_path.startswith('recordings') else video_path
     %}
     {% set video_filename = video_path.split('/')[-1] if video_path else '' %}
-    <div class="video-card"
-        onclick="playVideo('/recordings/{{ video_relative }}', '{{ rec.resi }}', {{ rec.durasi_detik or 0 }})">
+    <div class="video-card" onclick='openVideoModal({
+            url: "/recordings/{{ video_relative }}",
+            resi: "{{ rec.resi }}",
+            pegawai: "{{ rec.pegawai }}",
+            platform: "{{ rec.platform }}",
+            time: "{{ rec.waktu_mulai }}",
+            json: "/recordings/{{ video_relative|replace(".mp4", ".json") }}"
+        })'>
         <div class="video-thumbnail">
             {% set thumb_name = 'thumb_' + video_filename.replace('.mp4', '.jpg') if video_filename else '' %}
             <img src="/uploads/thumbnails/{{ thumb_name }}" alt="Thumbnail"
@@ -154,17 +242,64 @@
 </p>
 {% endif %}
 
-<!-- Video Modal -->
+<!-- Enhanced Video Modal -->
 <div class="modal fade" id="videoModal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content">
+    <div class="modal-dialog modal-xl modal-dialog-centered" style="max-height: 90vh; margin: 5vh auto;">
+        <div class="modal-content" style="max-height: 90vh; overflow: hidden;">
             <div class="modal-header">
-                <h5 class="modal-title" id="modalVideoTitle">Video</h5>
+                <div>
+                    <h5 class="modal-title" id="modalVideoTitle">Pemutar Video</h5>
+                    <p class="mb-0 text-muted small" id="modalVideoSubtitle">Detail rekaman</p>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-0">
-                <video id="modalVideo" controls class="w-100" style="max-height: 70vh;"
-                    onerror="this.outerHTML='<div class=\'text-center p-5\'><i class=\'bi bi-exclamation-triangle text-warning\' style=\'font-size: 48px;\'></i><p class=\'text-muted mt-3\'>Video tidak dapat diputar atau file tidak ditemukan</p></div>';"></video>
+                <div class="row g-0">
+                    <!-- Video Column -->
+                    <div class="col-lg-8 bg-black d-flex align-items-center justify-content-center">
+                        <video id="modalVideo" controls class="w-100" style="max-height: 70vh;" autoplay>
+                            Your browser does not support the video tag.
+                        </video>
+                    </div>
+
+                    <!-- Metadata Column -->
+                    <div class="col-lg-4 p-4" style="max-height: 70vh; overflow-y: auto;">
+                        <h6 class="text-uppercase text-muted mb-3 fw-bold">Informasi Paket</h6>
+
+                        <div class="mb-4">
+                            <label class="text-muted small">Nomor Resi</label>
+                            <div class="fs-4 font-monospace fw-bold text-break" id="metaResi">-</div>
+                        </div>
+
+                        <div class="row mb-4">
+                            <div class="col-6">
+                                <label class="text-muted small">Platform</label>
+                                <div id="metaPlatform" class="badge bg-secondary fs-6">-</div>
+                            </div>
+                            <div class="col-6">
+                                <label class="text-muted small">Pegawai</label>
+                                <div class="fw-bold" id="metaPegawai">-</div>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="text-muted small">Waktu Rekam</label>
+                            <div id="metaTime">-</div>
+                        </div>
+
+                        <hr>
+
+                        <h6 class="text-uppercase text-muted mb-3 fw-bold">File Metadata (JSON)</h6>
+                        <pre id="metaJson" class="bg-light p-3 rounded small text-break border"
+                            style="max-height: 200px; overflow: auto; font-size: 11px;">Memuat metadata...</pre>
+
+                        <div class="d-grid gap-2 mt-4">
+                            <a id="btnDownloadVideo" href="#" class="btn btn-primary" download>
+                                <i class="bi bi-download me-2"></i>Unduh Video
+                            </a>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -174,12 +309,396 @@
 <div id="thumbGeneratingAlert" class="alert alert-info position-fixed bottom-0 end-0 m-3"
     style="display: none; z-index: 1050;">
     <span class="spinner-border spinner-border-sm me-2"></span>
-    Generating thumbnails...
+    Membuat thumbnail...
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
+    // Barcode Search Variables
+    let searchCameraUrl = '';
+    let barcodeSearchInterval = null;
+    let isSearching = false;
+
+    // Sound effects (same as recording page)
+    const sounds = {
+        beep: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGWi77eafTRAMUKfj8LZjHAY4ktfyy3ksBSR3x/DdkEAKFF606+uoVRQKRp/g8r5sIQUrgs7y2Yk2CBlou+3mn00QDFCn4/C2YxwGOJLX8st5LAUkd8fw3ZBBChRet+vrqFUUCkaf4PK+bCEFK4LO8tmJNggZaLvt5p9NEAxQp+PwtmMcBjiS1/LLeSsFJHfH8N2QQAoUXrfr66hVFApGn+DyvmwhBSuBzvLZiTYIGWi77eafTRAMUKfj8LZjHAY4ktfyy3ksBSR3x/DdkEAKFF636+uoVRQKRp/g8r5sIQUrgs7y2Yk2CBlou+3mn00QDFCn4/C2YxwGOJLX8st5LAUkd8fw3ZBBChRet+vrqFUUCkaf4PK+bCEFK4LO8tmJNggZaLvt5p9NEAxQp+PwtmMcBjiS1/LLeSsFJHfH8N2QQAoUXrfr66hVFApGn+DyvmwhBSuBzvLZiTYIGWi77eafTRAMUKfj8LZjHAY4ktfyy3ksBSR3x/DdkEAKFF636+uoVRQKRp/g8r5sIQUrgs7y2Yk2CBlou+3mn00QDFCn4/C2YxwGOJLX8st5LAUkd8fw3ZBBChRet+vrqFUUCkaf4PK+bCEFK4LO8tmJNggZaLvt5p9NEAxQp+PwtmMcBjiS1/LLeSsFJHfH8N2QQAoUXrfr66hVFApGn+DyvmwhBSuBzvLZiTYIGWi77eafTRAMUKfj8LZjHAY4ktfyy3ksBSR3x/DdkEAKFF636+uoVRQKRp/g8r5sIQU='),
+        success: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGWi77eafTRAMUKfj8LZjHAY4ktfyy3ksBSR3x/DdkEAKFF606+uoVRQKRp/g8r5sIQUrgs7y2Yk2CBlou+3mn00QDFCn4/C2YxwGOJLX8st5LAUkd8fw3ZBBChRet+vrqFUUCkaf4PK+bCEFK4LO8tmJNggZaLvt5p9NEAxQp+PwtmMcBjiS1/LLeSsFJHfH8N2QQAoUXrfr66hVFApGn+DyvmwhBSuBzvLZiTYIGWi77eafTRAMUKfj8LZjHAY4ktfyy3ksBSR3x/DdkEAKFF636+uoVRQKRp/g8r5sIQUrgs7y2Yk2CBlou+3mn00QDFCn4/C2YxwGOJLX8st5LAUkd8fw3ZBBChRet+vrqFUUCkaf4PK+bCEFK4LO8tmJNggZaLvt5p9NEAxQp+PwtmMcBjiS1/LLeSsFJHfH8N2QQAoUXrfr66hVFApGn+DyvmwhBSuBzvLZiTYIGWi77eafTRAMUKfj8LZjHAY4ktfyy3ksBSR3x/DdkEAKFF636+uoVRQKRp/g8r5sIQUrgs7y2Yk2CBlou+3mn00QDFCn4/C2YxwGOJLX8st5LAUkd8fw3ZBBChRet+vrqFUUCkaf4PK+bCEFK4LO8tmJNggZaLvt5p9NEAxQp+PwtmMcBjiS1/LLeSsFJHfH8N2QQAoUXrfr66hVFApGn+DyvmwhBSuBzvLZiTYIGWi77eafTRAMUKfj8LZjHAY4ktfyy3ksBSR3x/DdkEAKFF636+uoVRQKRp/g8r5sIQU='),
+        error: new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGWi77eafTRAMUKfj8LZjHAY4ktfyy3ksBSR3x/DdkEAKFF606+uoVRQKRp/g8r5sIQUrgs7y2Yk2CBlou+3mn00QDFCn4/C2YxwGOJLX8st5LAUkd8fw3ZBBChRet+vrqFUUCkaf4PK+bCEFK4LO8tmJNggZaLvt5p9NEAxQp+PwtmMcBjiS1/LLeSsFJHfH8N2QQAoUXrfr66hVFApGn+DyvmwhBSuBzvLZiTYIGWi77eafTRAMUKfj8LZjHAY4ktfyy3ksBSR3x/DdkEAKFF636+uoVRQKRp/g8r5sIQUrgs7y2Yk2CBlou+3mn00QDFCn4/C2YxwGOJLX8st5LAUkd8fw3ZBBChRet+vrqFUUCkaf4PK+bCEFK4LO8tmJNggZaLvt5p9NEAxQp+PwtmMcBjiS1/LLeSsFJHfH8N2QQAoUXrfr66hVFApGn+DyvmwhBSuBzvLZiTYIGWi77eafTRAMUKfj8LZjHAY4ktfyy3ksBSR3x/DdkEAKFF636+uoVRQKRp/g8r5sIQUrgs7y2Yk2CBlou+3mn00QDFCn4/C2YxwGOJLX8st5LAUkd8fw3ZBBChRet+vrqFUUCkaf4PK+bCEFK4LO8tmJNggZaLvt5p9NEAxQp+PwtmMcBjiS1/LLeSsFJHfH8N2QQAoUXrfr66hVFApGn+DyvmwhBSuBzvLZiTYIGWi77eafTRAMUKfj8LZjHAY4ktfyy3ksBSR3x/DdkEAKFF636+uoVRQKRp/g8r5sIQU=')
+    };
+
+    // Play sound helper
+    function playSound(soundName) {
+        try {
+            if (sounds[soundName]) {
+                sounds[soundName].currentTime = 0;
+                sounds[soundName].play().catch(e => console.log('Sound play failed:', e));
+            }
+        } catch (e) {
+            console.log('Sound error:', e);
+        }
+    }
+
+    // Clear search
+    function clearSearch() {
+        document.getElementById('searchInput').value = '';
+        document.getElementById('searchInput').focus();
+    }
+
+    // Input Method Handling
+    document.addEventListener('DOMContentLoaded', function () {
+        const methodRadios = document.querySelectorAll('input[name="search-method"]');
+        const cameraSection = document.getElementById('camera-search-section');
+        const searchInput = document.getElementById('searchInput');
+
+        methodRadios.forEach(radio => {
+            radio.addEventListener('change', function () {
+                // Stop any ongoing camera search
+                stopCameraSearch();
+
+                if (this.value === 'scanner') {
+                    // Scanner mode: auto-focus input
+                    cameraSection.classList.add('d-none');
+                    searchInput.focus();
+                    setupScannerMode();
+                } else if (this.value === 'camera') {
+                    // Camera mode: show camera section
+                    cameraSection.classList.remove('d-none');
+                    loadCamerasForSearch();
+                } else {
+                    // Manual mode
+                    cameraSection.classList.add('d-none');
+                }
+            });
+        });
+
+        // Load cameras on page load
+        loadCamerasForSearch();
+
+        // Connect and cancel camera search buttons (now handled via onclick attributes)
+        // document.getElementById('btn-connect-camera-search').addEventListener('click', connectCameraForSearch);
+        // document.getElementById('btn-cancel-camera-search').addEventListener('click', cancelCameraSearch);
+    });
+
+    // Scanner Mode: Auto-focus and submit on Enter
+    function setupScannerMode() {
+        const input = document.getElementById('searchInput');
+
+        // Auto-focus keep alive
+        input.addEventListener('blur', function (e) {
+            const method = document.querySelector('input[name="search-method"]:checked');
+            if (method && method.value === 'scanner') {
+                // Allow interaction with other controls
+                if (e.relatedTarget && (
+                    e.relatedTarget.tagName === 'BUTTON' ||
+                    e.relatedTarget.tagName === 'SELECT' ||
+                    e.relatedTarget.tagName === 'INPUT'
+                )) {
+                    return;
+                }
+                // Force focus back
+                setTimeout(() => {
+                    if (document.activeElement !== input) {
+                        this.focus();
+                    }
+                }, 100);
+            }
+        });
+
+        // Auto-submit on Enter
+        input.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (this.value.trim()) {
+                    playSound('beep');
+                    document.getElementById('searchForm').submit();
+                }
+            }
+        });
+    }
+
+    // Load cameras for search
+    function loadCamerasForSearch() {
+        const select = document.getElementById('camera-search-select');
+
+        fetch('/api/cameras')
+            .then(res => res.json())
+            .then(data => {
+                select.innerHTML = '<option value="">Pilih kamera...</option>';
+                (data.cameras || []).forEach(cam => {
+                    const option = document.createElement('option');
+                    option.value = cam.url;
+                    option.text = `📷 ${cam.name}`;
+                    select.add(option);
+                });
+            })
+            .catch(err => console.error('Failed to load cameras:', err));
+    }
+
+    // NEW: Connect camera for search (step 1)
+    // NEW: Connect camera for search (step 1)
+    // NEW: Connect camera for search with Retry Mechanism
+    let connectionRetries = 0;
+    const MAX_SH_RETRIES = 3;
+    let retryTimeout = null;
+
+    function connectCameraForSearch() {
+        const select = document.getElementById('camera-search-select');
+        searchCameraUrl = select.value;
+
+        if (!searchCameraUrl) {
+            alert('Pilih kamera terlebih dahulu!');
+            return;
+        }
+
+        const img = document.getElementById('camera-search-feed');
+        const placeholder = document.getElementById('camera-search-placeholder');
+        const status = document.getElementById('camera-search-status');
+        const selectorRow = document.getElementById('camera-selector-row');
+        const scanningControls = document.getElementById('camera-scanning-controls');
+
+        // Show scanning controls immediately
+        if (selectorRow) selectorRow.classList.add('d-none');
+        if (scanningControls) scanningControls.classList.remove('d-none');
+
+        // Show camera feed container
+        img.style.display = 'block';
+        placeholder.style.display = 'none';
+
+        status.innerHTML = '<span class="text-info">🔵 Mempersiapkan kamera...</span>';
+
+        connectionRetries = 0;
+
+        // Force release first to ensure clean state
+        fetch('/api/camera/release', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: searchCameraUrl })
+        }).finally(() => {
+            attemptCameraConnection();
+        });
+
+        function attemptCameraConnection() {
+            status.innerHTML = '<span class="text-info">🔵 Menghubungkan...</span>';
+
+            // Set source with timestamp to prevent caching
+            img.src = `/video_feed?url=${encodeURIComponent(searchCameraUrl)}&t=${Date.now()}`;
+
+            img.onload = function () {
+                status.innerHTML = '<span class="text-success">🟢 Kamera terhubung! Mencari barcode...</span>';
+                isSearching = true;
+                connectionRetries = 0; // Reset
+                startBarcodeSearchLoop();
+            };
+
+            img.onerror = function () {
+                if (connectionRetries < MAX_SH_RETRIES) {
+                    connectionRetries++;
+                    status.innerHTML = `<span class="text-warning">⚠️ Gagal terhubung. Mencoba ulang (${connectionRetries}/${MAX_SH_RETRIES})...</span>`;
+                    console.log(`>>> [Video Gallery] Connection failed, retrying ${connectionRetries}/${MAX_SH_RETRIES}`);
+
+                    retryTimeout = setTimeout(() => {
+                        attemptCameraConnection();
+                    }, 2000); // Wait 2s before retry
+                } else {
+                    status.innerHTML = '<span class="text-danger">⚠️ Gagal terhubung. Silakan klik "Batal" dan coba lagi.</span>';
+                    console.error('>>> [Video Gallery] Connection failed after max retries');
+                }
+            };
+        }
+    }
+
+    // NEW: Cancel camera search and reset to initial state
+    function cancelCameraSearch() {
+        console.log('>>> [Video Gallery] Canceling camera search');
+
+        // Stop barcode detection
+        if (barcodeSearchInterval) {
+            clearTimeout(barcodeSearchInterval);
+            barcodeSearchInterval = null;
+        }
+
+        // Stop pending retries
+        if (retryTimeout) {
+            clearTimeout(retryTimeout);
+            retryTimeout = null;
+        }
+
+        const img = document.getElementById('camera-search-feed');
+        if (img) {
+            img.src = '';
+            img.style.display = 'none';
+        }
+
+        const placeholder = document.getElementById('camera-search-placeholder');
+        if (placeholder) {
+            placeholder.style.display = 'flex';
+            placeholder.innerHTML = `
+                <i class="fs-1 mb-2">📷</i>
+                <h6>Pilih Kamera</h6>
+                <p class="small mb-0">Pilih kamera di bawah untuk mulai scan</p>
+            `;
+        }
+
+        // Show camera selector again, hide cancel button
+        const selectorRow = document.getElementById('camera-selector-row');
+        const scanningControls = document.getElementById('camera-scanning-controls');
+        if (selectorRow) selectorRow.classList.remove('d-none');
+        if (scanningControls) scanningControls.classList.add('d-none');
+
+        // Reset status
+        const status = document.getElementById('camera-search-status');
+        if (status) status.innerHTML = 'Pilih kamera dan klik Connect Camera';
+
+        isSearching = false;
+
+        // Release camera
+        if (searchCameraUrl) {
+            fetch('/api/camera/release', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: searchCameraUrl })
+            }).catch(e => console.log('Release failed', e));
+
+            searchCameraUrl = '';
+        }
+    }
+
+    // Stop camera search (called after successful scan)
+    function stopCameraSearch() {
+        if (barcodeSearchInterval) {
+            clearTimeout(barcodeSearchInterval);
+            barcodeSearchInterval = null;
+        }
+
+        const img = document.getElementById('camera-search-feed');
+        if (img) {
+            img.src = '';
+            img.style.display = 'none';
+        }
+
+        const placeholder = document.getElementById('camera-search-placeholder');
+        if (placeholder) {
+            placeholder.style.display = 'flex';
+        }
+
+        // Show camera selector again, hide cancel button
+        const selectorRow = document.getElementById('camera-selector-row');
+        const scanningControls = document.getElementById('camera-scanning-controls');
+        if (selectorRow) selectorRow.classList.remove('d-none');
+        if (scanningControls) scanningControls.classList.add('d-none');
+
+        isSearching = false;
+
+        // Release camera
+        if (searchCameraUrl) {
+            fetch('/api/camera/release', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: searchCameraUrl })
+            }).catch(e => console.log('Release failed', e));
+
+            searchCameraUrl = '';
+        }
+    }
+
+    // Barcode detection loop
+    function startBarcodeSearchLoop() {
+        if (!window.socket || !window.socket.connected) {
+            console.warn('Socket not ready, retrying...');
+            barcodeSearchInterval = setTimeout(startBarcodeSearchLoop, 500);
+            return;
+        }
+
+        const socket = window.socket;
+
+        // Listen for barcode results
+        socket.off('barcode_result');
+        socket.on('barcode_result', (data) => {
+            if (!isSearching) return;
+
+            if (data.success && data.found && data.barcodes.length > 0) {
+                const barcode = data.barcodes[0].data;
+                console.log('>>> [Search] Barcode detected:', barcode);
+                playSound('beep');
+
+                // Update search input
+                const searchInput = document.getElementById('searchInput');
+                searchInput.value = barcode;
+
+                // Visual feedback
+                const status = document.getElementById('camera-search-status');
+                status.innerHTML = `<span class="text-success">✅ Barcode detected: <strong>${barcode}</strong></span>`;
+
+                // Stop scanning
+                stopCameraSearch();
+
+                // Auto-submit form after short delay
+                setTimeout(() => {
+                    document.getElementById('searchForm').submit();
+                }, 500);
+            }
+        });
+
+        // Detection loop
+        const detectBarcode = () => {
+            if (!isSearching || !searchCameraUrl) return;
+
+            socket.emit('detect_barcode', { url: searchCameraUrl });
+            barcodeSearchInterval = setTimeout(detectBarcode, 1000);
+        };
+
+        detectBarcode();
+    }
+
+    function openVideoModal(data) {
+        // Set basic info
+        document.getElementById('modalVideoTitle').textContent = `📦 ${data.resi}`;
+        document.getElementById('modalVideoSubtitle').textContent = `${data.platform} • ${data.pegawai}`;
+
+        // Update Metadata
+        document.getElementById('metaResi').textContent = data.resi;
+        document.getElementById('metaPegawai').textContent = data.pegawai;
+        document.getElementById('metaPlatform').textContent = data.platform;
+        document.getElementById('metaTime').textContent = data.time;
+
+        // Video Source
+        const video = document.getElementById('modalVideo');
+        video.src = data.url;
+        video.load();
+
+        // Download Link
+        document.getElementById('btnDownloadVideo').href = data.url;
+        document.getElementById('btnDownloadVideo').download = data.url.split('/').pop();
+
+        // Load JSON
+        const jsonPre = document.getElementById('metaJson');
+        jsonPre.textContent = 'Loading metadata...';
+
+        fetch(data.json)
+            .then(res => {
+                if (!res.ok) throw new Error('Metadata JSON not found (Mungkin video lama)');
+                return res.json();
+            })
+            .then(jsonData => {
+                // Format JSON nicely
+                jsonPre.textContent = JSON.stringify(jsonData, null, 2);
+            })
+            .catch(err => {
+                jsonPre.textContent = err.message;
+            });
+
+        // Show Modal
+        const modal = new bootstrap.Modal(document.getElementById('videoModal'));
+        modal.show();
+
+        // Stop on close
+        document.getElementById('videoModal').addEventListener('hidden.bs.modal', () => {
+            video.pause();
+            video.src = '';
+        });
+    }
+
     // Auto-generate thumbnails on page load if there are missing thumbnails
     document.addEventListener('DOMContentLoaded', function () {
         // Check for missing thumbnails by looking at fallback elements that are visible

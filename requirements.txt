@@ -1,8 +1,12 @@
 flask>=3.0.0
 flask-sqlalchemy>=3.1.0
 flask-socketio>=5.3.0
+flask-login>=0.6.3
 python-socketio>=5.10.0
 eventlet>=0.35.0
 Pillow>=10.0.0
 reportlab>=4.0.0
 python-dotenv>=1.0.0
+opencv-python>=4.8.0
+pyzbar>=0.1.9
+numpy>=1.24.0

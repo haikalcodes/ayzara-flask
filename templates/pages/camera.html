@@ -1,29 +1,64 @@
 {% extends 'base.html' %}
 
-{% block title %}Camera Capture - AYZARA{% endblock %}
-{% block page_title %}Camera Capture{% endblock %}
+{% block title %}Ambil Gambar - AYZARA{% endblock %}
+{% block page_title %}Ambil Gambar{% endblock %}
 
 {% block content %}
-<div class="alert alert-info mb-4">
-    <i class="bi bi-info-circle me-2"></i>
-    <strong>Info:</strong> Capture frame dari kamera IP tanpa mengganggu proses recording terminal.
-</div>
 
 <div class="row g-4">
     <div class="col-lg-8">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0"><i class="bi bi-camera me-2"></i>Camera Preview</h5>
-                <button id="captureBtn" onclick="captureFrame()" class="btn btn-primary">
-                    <i class="bi bi-camera me-2"></i>Capture Frame
-                </button>
+                <h5 class="card-title mb-0"><i class="bi bi-camera me-2"></i>Ambil Gambar</h5>
+                <div class="d-flex gap-2">
+                </div>
             </div>
             <div class="card-body">
-                <div id="capturePreview" class="text-center bg-glass p-5 rounded">
-                    <i class="bi bi-camera-video" style="font-size: 80px; opacity: 0.3;"></i>
-                    <p class="text-muted mt-3">Klik "Capture Frame" untuk mengambil gambar dari kamera</p>
+                <!-- CONTROLS AREA -->
+                <div class="row mb-3 justify-content-center">
+                    <div class="col-md-8 text-center">
+                        <label class="form-label text-muted small">Pilih Kamera</label>
+                        <select id="cameraSelect" class="form-select shadow-sm mb-3" onchange="updateCameraInfo()">
+                            <option value="" disabled selected>⏳ Memuat daftar kamera...</option>
+                        </select>
+                    </div>
                 </div>
-                <div id="captureStatus" class="mt-3"></div>
+
+                <!-- PREVIEW AREA -->
+                <div id="previewContainer" class="text-center p-3 rounded position-relative"
+                    style="min-height: 400px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: linear-gradient(135deg, #1a1d29 0%, #2d3142 100%); border: 1px solid rgba(255,255,255,0.1);">
+                    <!-- Placeholder / Initial State -->
+                    <div id="cameraPlaceholder" class="text-light">
+                        <i class="bi bi-camera-video display-1" style="opacity: 0.4; color: #6c757d;"></i>
+                        <p class="mt-3 lead text-muted">Pilih kamera lalu klik "Cek Kamera"</p>
+                    </div>
+
+                    <!-- Live Stream Image (Hidden initially) -->
+                    <img id="liveStream" src="" class="img-fluid d-none"
+                        style="max-height: 500px; width: 100%; object-fit: contain;" alt="Live Stream">
+                </div>
+
+                <!-- ALERT FEEDBACK AREA -->
+                <div id="feedbackArea" class="mt-3"></div>
+
+                <!-- ACTION BUTTONS CENTERED -->
+                <div class="d-flex justify-content-center mt-3 gap-2">
+                    <button id="btnCheck" onclick="checkCamera()" class="btn btn-info text-white px-4 fw-bold" disabled>
+                        <i class="bi bi-search me-2"></i>Cek Kamera
+                    </button>
+
+                    <!-- RENAMED ACTION onclick=performCapture -->
+                    <button id="btnCapture" onclick="performCapture()" class="btn btn-primary px-4 fw-bold d-none">
+                        <i class="bi bi-camera me-2"></i>Ambil Gambar
+                    </button>
+
+                    <button id="btnReset" onclick="resetUI()" class="btn btn-outline-secondary px-4 d-none">
+                        <i class="bi bi-arrow-counterclockwise me-2"></i>Reset
+                    </button>
+                </div>
+
+                <!-- Status Debug -->
+                <div id="captureStatus" class="d-none"></div>
             </div>
         </div>
     </div>
@@ -36,8 +71,8 @@
             <div class="card-body">
                 <table class="table table-borderless">
                     <tr>
-                        <td class="text-muted">RTSP URL</td>
-                        <td><code class="small">{{ rtsp_url[:40] }}...</code></td>
+                        <td class="text-muted">Camera URL</td>
+                        <td><code class="small" id="info-url">Select a camera...</code></td>
                     </tr>
                     <tr>
                         <td class="text-muted">Format</td>
@@ -65,4 +100,420 @@
         </div>
     </div>
 </div>
+
+<!-- Capture Result Modal -->
+<!-- REMOVED 'fade' class to debug visibility -->
+<div class="modal" id="captureModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content text-white" style="background-color: #2d3142;">
+            <div class="modal-header border-bottom border-secondary">
+                <h5 class="modal-title"><i class="bi bi-camera me-2"></i>Hasil Pengambilan Gambar</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center p-0 bg-dark position-relative">
+                <div class="d-flex justify-content-center align-items-center"
+                    style="min-height: 300px; background: #000;">
+                    <img id="modalCaptureImage" src="" class="img-fluid" style="max-height: 70vh; object-fit: contain;"
+                        alt="Captured Frame">
+                </div>
+            </div>
+            <div class="modal-footer border-top border-secondary justify-content-center">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+                <a id="btnDownloadModal" href="#" download class="btn btn-success">
+                    <i class="bi bi-download me-2"></i>Unduh Gambar
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Global variables
+    let selectedCameraUrl = '';
+    let healthCheckInterval = null;
+
+    // Load cameras when page loads
+    document.addEventListener('DOMContentLoaded', function () {
+        loadCameras();
+    });
+
+    function loadCameras() {
+        const select = document.getElementById('cameraSelect');
+        if (!select) return;
+
+        // Show loading state
+        select.innerHTML = '<option value="" disabled selected>⏳ Memuat daftar kamera...</option>';
+
+        fetch('/api/cameras')
+            .then(res => res.json())
+            .then(data => {
+                const cameras = data.cameras || [];
+                select.innerHTML = '<option value="" disabled selected>Pilih Kamera</option>';
+
+                if (cameras.length === 0) {
+                    const option = document.createElement('option');
+                    option.text = "Tidak ada kamera ditemukan";
+                    select.add(option);
+                    return;
+                }
+
+                cameras.forEach((cam, index) => {
+                    const option = document.createElement('option');
+                    option.value = cam.url;
+                    option.text = cam.name || `Camera ${index + 1}`;
+                    if (index === data.active_index) {
+                        option.selected = true;
+                    }
+                    select.add(option);
+                });
+
+                // Add separator
+                const separator = document.createElement('option');
+                separator.disabled = true;
+                separator.text = '──────────';
+                select.add(separator);
+
+                // Add "Add New Camera" option
+                const addOption = document.createElement('option');
+                addOption.value = '__add_new__';
+                addOption.text = '➕ Tambah Kamera Baru';
+                select.add(addOption);
+
+                // Initial update
+                updateCameraInfo();
+            })
+            .catch(err => {
+                console.error('Failed to load cameras', err);
+                select.innerHTML = '<option>❌ Error memuat kamera</option>';
+            });
+    }
+
+    function updateCameraInfo() {
+        const select = document.getElementById('cameraSelect');
+        const url = select.value;
+        const btnCheck = document.getElementById('btnCheck');
+
+        // Handle "Add New Camera"
+        if (url === '__add_new__') {
+            window.location.href = '/camera-settings';
+            return;
+        }
+
+        const infoUrl = document.getElementById('info-url');
+        if (infoUrl && url) infoUrl.textContent = url;
+
+        // Update selected URL
+        selectedCameraUrl = url;
+
+        // Update Check Button State
+        if (btnCheck) {
+            btnCheck.disabled = !url;
+            btnCheck.innerHTML = '<i class="bi bi-search me-2"></i>Check Camera';
+        }
+
+        // When camera changes, reset the UI
+        resetUI(true);
+    }
+
+    function resetUI(keepSelection = false) {
+        // Clear health check
+        if (healthCheckInterval) {
+            clearInterval(healthCheckInterval);
+            healthCheckInterval = null;
+        }
+
+        // Reset Visuals
+        document.getElementById('cameraPlaceholder').classList.remove('d-none');
+        const liveStream = document.getElementById('liveStream');
+        liveStream.classList.add('d-none');
+        liveStream.removeAttribute('src'); // Stop stream
+
+        // document.getElementById('capturedImage').classList.add('d-none');
+        document.getElementById('feedbackArea').innerHTML = '';
+
+        // Reset Buttons
+        const btnCheck = document.getElementById('btnCheck');
+        const btnCapture = document.getElementById('btnCapture');
+        const btnReset = document.getElementById('btnReset');
+
+        if (btnCheck) {
+            btnCheck.classList.remove('d-none');
+            btnCheck.disabled = !document.getElementById('cameraSelect').value;
+            // FIX: Reset button text
+            btnCheck.innerHTML = '<i class="bi bi-search me-2"></i>Check Camera';
+        }
+
+        if (btnCapture) btnCapture.classList.add('d-none');
+        if (btnReset) btnReset.classList.add('d-none');
+
+        if (!keepSelection) {
+            const select = document.getElementById('cameraSelect');
+            if (select) select.value = "";
+            selectedCameraUrl = '';
+        }
+    }
+
+    function checkCamera() {
+        const select = document.getElementById('cameraSelect');
+        const url = select.value;
+        const btnCheck = document.getElementById('btnCheck');
+        const feedback = document.getElementById('feedbackArea');
+
+        if (!url) {
+            alert('Pilih kamera terlebih dahulu!');
+            return;
+        }
+
+        // Update selected URL
+        selectedCameraUrl = url;
+
+        // Show loading feedback
+        btnCheck.disabled = true;
+        btnCheck.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Menghubungkan...';
+        // feedback.innerHTML = '<div class="alert alert-info mb-0"><i class="bi bi-hourglass-split me-2"></i>Menghubungkan ke kamera...</div>';
+
+        // Start preview (same logic as recording.html)
+        startPreview();
+    }
+
+    function startPreview() {
+        // Clear any existing health check
+        if (healthCheckInterval) clearInterval(healthCheckInterval);
+
+        const img = document.getElementById('liveStream');
+        const placeholder = document.getElementById('cameraPlaceholder');
+        const feedback = document.getElementById('feedbackArea');
+
+        // Reset state: Show image container
+        img.classList.remove('d-none');
+        img.style.display = 'block';
+
+        placeholder.classList.add('d-none');
+        placeholder.style.display = 'none';
+
+        // Helper to show disconnect UI
+        const showDisconnectUI = () => {
+            const btnCheck = document.getElementById('btnCheck');
+
+            // Update feedback
+            feedback.innerHTML = `
+                <div class="alert alert-danger">
+                    <strong><i class="bi bi-exclamation-triangle me-2"></i>Koneksi Terputus</strong><br>
+                    Kamera tidak merespon atau koneksi hilang.
+                </div>
+            `;
+
+            // Hide image
+            img.style.display = 'none';
+            img.classList.add('d-none');
+            img.removeAttribute('src');
+
+            // Show placeholder with retry
+            placeholder.classList.remove('d-none');
+            placeholder.style.display = 'flex';
+            placeholder.innerHTML = `
+                <div class="text-center">
+                    <i class="fs-1 mb-3 text-danger">⚠️</i>
+                    <h4 class="text-danger">Koneksi Terputus</h4>
+                    <p class="text-light">Kamera tidak merespon atau koneksi hilang.</p>
+                    <button class="btn btn-primary mt-2" onclick="startPreview()">🔄 Hubungkan Ulang</button>
+                </div>
+            `;
+
+            // Reset buttons
+            btnCheck.classList.remove('d-none');
+            btnCheck.disabled = false;
+            btnCheck.innerHTML = '<i class="bi bi-search me-2"></i>Check Camera';
+            document.getElementById('btnCapture').classList.add('d-none');
+            document.getElementById('btnReset').classList.add('d-none');
+        };
+
+        // Setup stream handlers
+        img.onload = function () {
+            feedback.innerHTML = `
+                <div class="alert alert-success d-flex align-items-center mb-0">
+                    <i class="bi bi-camera-video-fill me-2 fs-5"></i>
+                    <div><strong>🟢 Kamera Online (Stream)</strong></div>
+                </div>
+            `;
+
+            // Ensure placeholder is gone
+            placeholder.classList.add('d-none');
+            placeholder.style.display = 'none';
+
+            // Show capture button
+            document.getElementById('btnCheck').classList.add('d-none');
+            document.getElementById('btnCapture').classList.remove('d-none');
+            document.getElementById('btnReset').classList.remove('d-none');
+        };
+
+        img.onerror = function () {
+            console.log('>>> [Preview] Image load error triggered');
+            showDisconnectUI();
+        };
+
+        // Set stream source with cache buster
+        img.src = `/video_feed?url=${encodeURIComponent(selectedCameraUrl)}&t=${new Date().getTime()}`;
+
+        // HEALTH CHECK: Poll every 2 seconds
+        if (healthCheckInterval) clearInterval(healthCheckInterval);
+
+        healthCheckInterval = setInterval(() => {
+            if (!selectedCameraUrl) return;
+
+            fetch(`/api/camera/check?url=${encodeURIComponent(selectedCameraUrl)}&t=${Date.now()}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.active) {
+                        console.log('>>> [Health Check] Camera died, triggering disconnect UI');
+                        clearInterval(healthCheckInterval);
+                        showDisconnectUI();
+                    }
+                })
+                .catch(err => console.log('Health check failed', err));
+        }, 2000);
+
+        // TIMEOUT CHECK: 10 seconds
+        setTimeout(() => {
+            if (feedback.innerHTML.includes('Menghubungkan')) {
+                // Still connecting after 10s = timeout
+                feedback.innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong><i class="bi bi-x-circle me-2"></i>Koneksi Timeout</strong><br>
+                        Kamera tidak merespon dalam 10 detik.
+                    </div>
+                `;
+
+                img.style.display = 'none';
+                img.classList.add('d-none');
+
+                placeholder.classList.remove('d-none');
+                placeholder.style.display = 'flex';
+                placeholder.innerHTML = `
+                    <div class="text-center">
+                        <i class="fs-1 mb-3 text-danger">⚠️</i>
+                        <h4 class="text-danger">Koneksi Timeout</h4>
+                        <p class="text-light">Kamera tidak merespon dalam 10 detik.</p>
+                        <button class="btn btn-primary mt-2" onclick="startPreview()">🔄 Coba Lagi (Retry)</button>
+                    </div>
+                `;
+
+                // Reset buttons
+                document.getElementById('btnCheck').classList.remove('d-none');
+                document.getElementById('btnCheck').disabled = false;
+                document.getElementById('btnCheck').innerHTML = '<i class="bi bi-search me-2"></i>Check Camera';
+                document.getElementById('btnCapture').classList.add('d-none');
+                document.getElementById('btnReset').classList.add('d-none');
+            }
+        }, 10000);
+    }
+
+    // RENAMED TO performCapture TO AVOID CONFLICT WITH app.js' captureFrame
+    function performCapture() {
+        const select = document.getElementById('cameraSelect');
+        const url = select.value;
+        const btnCapture = document.getElementById('btnCapture');
+        const feedback = document.getElementById('feedbackArea');
+
+        console.log('[Capture] Starting capture process (performCapture)...');
+
+        // Loading
+        btnCapture.disabled = true;
+        btnCapture.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Capturing...';
+
+        fetch('/api/camera/capture', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: url })
+        })
+            .then(res => {
+                console.log('[Capture] Response received:', res.status);
+                return res.json();
+            })
+            .then(data => {
+                console.log('[Capture] Data received:', data);
+                if (data.success) {
+                    // SUCCESS - Show Modal
+                    console.log('[Capture] Success! Preparing modal...');
+                    try {
+                        const modalImg = document.getElementById('modalCaptureImage');
+                        const downloadBtn = document.getElementById('btnDownloadModal');
+                        const modalEl = document.getElementById('captureModal');
+
+                        // Check elements
+                        if (!modalImg) {
+                            console.error('[Capture] Error: modalCaptureImage not found');
+                            alert('Dev Error: modalCaptureImage missing');
+                        }
+                        if (!downloadBtn) console.error('[Capture] Error: btnDownloadModal not found');
+                        if (!modalEl) console.error('[Capture] Error: captureModal not found');
+
+                        if (!modalEl) {
+                            alert('Critical: captureModal element not found!');
+                            return;
+                        }
+
+                        // Set content (safely)
+                        if (modalImg) modalImg.src = data.image;
+                        if (downloadBtn) {
+                            downloadBtn.href = data.saved_path;
+                            downloadBtn.setAttribute('download', data.filename || 'capture.jpg');
+                        }
+
+                        // ALERT SUCCESS to confirm execution
+                        alert("Capture Successful! Opening Image...");
+
+                        // Initialize and show modal
+                        console.log('[Capture] Initializing Bootstrap Modal check...');
+                        if (typeof bootstrap === 'undefined') {
+                            console.error('[Capture] Bootstrap is not defined!');
+                            alert('Internal Error: Bootstrap library not loaded.');
+                            return;
+                        }
+
+                        // Use getOrCreateInstance
+                        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                        console.log('[Capture] Showing modal...');
+                        modal.show();
+
+                        // Clear feedback
+                        if (feedback) feedback.innerHTML = '';
+
+                    } catch (e) {
+                        console.error('[Capture] Exception in success block:', e);
+                        alert('Frontend Logic Error: ' + e.message);
+                        if (feedback) feedback.innerHTML = `<div class="alert alert-danger">Frontend Error: ${e.message}</div>`;
+                    }
+
+                } else {
+                    // ERROR
+                    console.warn('[Capture] Server returned error:', data.error);
+                    if (feedback) {
+                        feedback.innerHTML = `
+                            <div class="alert alert-warning">
+                                <strong><i class="bi bi-x-circle me-2"></i>Gagal Capture!</strong><br>
+                                ${data.error}
+                            </div>
+                        `;
+                    }
+                }
+            })
+            .catch(err => {
+                console.error('[Capture] Fetch/Network Error:', err);
+                alert('Fetch Error: ' + err.message);
+                if (feedback) feedback.innerHTML = `<div class="alert alert-danger">System Error: ${err.message}</div>`;
+            })
+            .finally(() => {
+                console.log('[Capture] Cleanup...');
+                // Return button to normal
+                if (btnCapture) {
+                    btnCapture.disabled = false;
+                    btnCapture.innerHTML = '<i class="bi bi-camera me-2"></i>Ambil Gambar';
+
+                    // Ensure it is visible
+                    btnCapture.classList.remove('d-none');
+                }
+            });
+    }
+</script>
 {% endblock %}

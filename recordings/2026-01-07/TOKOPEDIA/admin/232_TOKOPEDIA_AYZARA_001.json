@@ -1,0 +1,24 @@
+{
+  "bukti_rekaman": {
+    "versi": "1.0",
+    "brand": "AYZARA",
+    "dibuat_oleh": "Packing Recording System"
+  },
+  "informasi_paket": {
+    "nomor_resi": "232",
+    "platform": "TOKOPEDIA",
+    "pegawai": "admin"
+  },
+  "informasi_video": {
+    "nama_file": "232_TOKOPEDIA_AYZARA_001.mp4",
+    "durasi_detik": 9,
+    "ukuran_kb": 1793,
+    "sha256_hash": "818c235f6ba77dc1731617df35e05974e5afb824c02473a22b6f872d640df536"
+  },
+  "waktu": {
+    "rekaman_mulai": "2026-01-07 23:12:57",
+    "rekaman_selesai": "2026-01-07 23:13:07",
+    "zona_waktu": "Asia/Jakarta (WIB)"
+  },
+  "catatan": "File ini adalah bukti otentik rekaman packing. Hash SHA256 dapat digunakan untuk memverifikasi keaslian video."
+}

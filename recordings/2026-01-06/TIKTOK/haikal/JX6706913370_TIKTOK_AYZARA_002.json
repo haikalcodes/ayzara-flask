@@ -1,0 +1,24 @@
+{
+  "bukti_rekaman": {
+    "versi": "1.0",
+    "brand": "AYZARA",
+    "dibuat_oleh": "Packing Recording System"
+  },
+  "informasi_paket": {
+    "nomor_resi": "JX6706913370",
+    "platform": "TIKTOK",
+    "pegawai": "haikal"
+  },
+  "informasi_video": {
+    "nama_file": "JX6706913370_TIKTOK_AYZARA_002.mp4",
+    "durasi_detik": 20,
+    "ukuran_kb": 4608,
+    "sha256_hash": "f6cf5f26ff3169d6a3f9a8516a2ef2dfc960666b23257972f6197b6b5db169b1"
+  },
+  "waktu": {
+    "rekaman_mulai": "2026-01-06 13:22:22",
+    "rekaman_selesai": "2026-01-06 13:22:42",
+    "zona_waktu": "Asia/Jakarta (WIB)"
+  },
+  "catatan": "File ini adalah bukti otentik rekaman packing. Hash SHA256 dapat digunakan untuk memverifikasi keaslian video."
+}
