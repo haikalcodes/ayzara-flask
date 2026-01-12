@@ -7,7 +7,7 @@
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center">
             <div>
-                <h1>📦 Rekam Packing</h1>
+                <h1><i class="bi bi-box-seam"></i> Rekam Packing</h1>
                 <p class="text-muted">Scan resi dan rekam proses packing secara otomatis</p>
             </div>
             <!-- <div id="connection-status">
@@ -16,6 +16,81 @@
         </div>
     </div>
 </div>
+
+<style>
+    #scan-visual-overlay {
+        pointer-events: none;
+        border: 4px solid rgba(40, 167, 69, 0.85);
+        box-shadow: 0 0 18px rgba(40, 167, 69, 0.6);
+        animation: scanPulse 1.4s ease-in-out infinite;
+        border-radius: 8px;
+    }
+
+    @keyframes scanPulse {
+        0% {
+            opacity: 0.35;
+        }
+
+        50% {
+            opacity: 1;
+        }
+
+        100% {
+            opacity: 0.35;
+        }
+    }
+
+    .zoom-controls {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        z-index: 100;
+        transition: opacity 0.3s;
+    }
+
+    .zoom-btn {
+        width: 45px;
+        height: 45px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .zoom-btn:hover {
+        background: rgba(40, 167, 69, 0.6);
+        transform: scale(1.1);
+    }
+
+    .zoom-btn:active {
+        transform: scale(0.9);
+    }
+
+    .zoom-info {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.5);
+        color: white;
+        padding: 5px 15px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        pointer-events: none;
+        z-index: 100;
+        display: none;
+    }
+</style>
 
 <div class="row">
     <!-- Left Column: Controls -->
@@ -32,10 +107,12 @@
                     <div class="btn-group w-100" role="group">
                         <input type="radio" class="btn-check" name="input-method" id="method-scanner" value="scanner"
                             checked>
-                        <label class="btn btn-outline-primary" for="method-scanner">📱 Scanner Barcode</label>
+                        <label class="btn btn-outline-primary" for="method-scanner"><i class="bi bi-phone me-1"></i>
+                            Scanner Barcode</label>
 
                         <input type="radio" class="btn-check" name="input-method" id="method-camera" value="camera">
-                        <label class="btn btn-outline-primary" for="method-camera">📷 Deteksi Kamera</label>
+                        <label class="btn btn-outline-primary" for="method-camera"><i class="bi bi-camera me-1"></i>
+                            Deteksi Kamera</label>
                     </div>
                 </div>
 
@@ -47,13 +124,13 @@
                         </select>
                         <button class="btn btn-outline-danger" type="button" onclick="closeCameraConnection()"
                             title="Tutup Kamera">
-                            ❌ Tutup
+                            <i class="bi bi-x-circle me-1"></i> Tutup
                         </button>
                     </div>
                     <div class="d-grid mt-2">
                         <button class="btn btn-success" type="button" onclick="if(selectedCameraUrl) startPreview()"
                             title="Hubungkan Paksa">
-                            ▶ Hubungkan (Manual)
+                            <i class="bi bi-play-fill me-1"></i> Hubungkan (Manual)
                         </button>
                     </div>
                     <div id="camera-status-indicator" class="mt-2 text-muted small">
@@ -72,7 +149,7 @@
                 <div class="d-grid gap-2">
                     {% for platform, data in platforms.items() %}
                     <button class="btn btn-lg btn-outline-secondary platform-btn" data-platform="{{ platform }}"
-                        style="border-left: 5px solid {{ data.color }}">
+                        style="border-left: 5px solid {{ data.color }};">
                         {{ platform }}
                     </button>
                     {% endfor %}
@@ -83,7 +160,7 @@
                 <div class="d-grid">
                     <button id="btn-reset-scanning" class="btn btn-outline-danger d-none" onclick="resetScanningState()"
                         title="Stop scanning and reset">
-                        ⏹️ Stop Scan Kamera
+                        <i class="bi bi-stop-fill me-1"></i> Stop Scan Kamera
                     </button>
                 </div>
             </div>
@@ -103,11 +180,14 @@
                 <!-- Camera Image -->
                 <img id="camera-feed" src="" class="img-fluid"
                     style="width: 100%; height: 100%; object-fit: contain; display: none;">
+                <!-- Scanning Visual Overlay -->
+                <div id="scan-visual-overlay" class="position-absolute top-0 start-0 w-100 h-100 d-none"
+                    style="background: rgba(40, 167, 69, 0.06);"></div>
 
                 <!-- Placeholder -->
                 <div id="camera-placeholder"
                     class="d-flex flex-column justify-content-center align-items-center h-100 text-muted p-5">
-                    <i class="fs-1 mb-3">📷</i>
+                    <i class="fs-1 mb-3 bi bi-record-circle text-danger"></i>
                     <h4>Kamera Belum Aktif</h4>
                     <p>Pilih kamera di sebelah kiri untuk memulai preview</p>
                 </div>
@@ -124,6 +204,20 @@
                     </div>
                     <div class="font-monospace" id="rec-info">RESI...</div>
                 </div>
+
+                <!-- Zoom Controls -->
+                <div id="zoom-container" class="zoom-controls d-none">
+                    <button class="zoom-btn" onclick="adjustZoom(0.5)" title="Zoom In">
+                        <i class="bi bi-plus-lg"></i>
+                    </button>
+                    <button class="zoom-btn" onclick="resetZoom()" title="Reset Zoom">
+                        <i class="bi bi-aspect-ratio"></i>
+                    </button>
+                    <button class="zoom-btn" onclick="adjustZoom(-0.5)" title="Zoom Out">
+                        <i class="bi bi-dash-lg"></i>
+                    </button>
+                </div>
+                <div id="zoom-indicator" class="zoom-info">Zoom: 1.0x</div>
             </div>
             <!-- New Location: Below Camera Feed, Above Footer -->
             <!-- New Location: Below Camera Feed, Above Footer -->
@@ -146,10 +240,10 @@
                     <div id="status-message" class="text-muted">Siap merekam...</div>
                     <div class="d-flex gap-2">
                         <button id="btn-stop" class="btn btn-danger d-none">
-                            ⏹️ Selesai & Simpan
+                            <i class="bi bi-check-circle-fill me-1"></i> Selesai & Simpan
                         </button>
                         <button id="btn-cancel" class="btn btn-outline-secondary d-none">
-                            ❌ Batal
+                            <i class="bi bi-x-lg me-1"></i> Batal
                         </button>
                     </div>
                 </div>
@@ -160,15 +254,16 @@
         <div class="card" id="last-recording-card" style="display: none;">
             <div class="card-body d-flex justify-content-between align-items-center">
                 <div>
-                    <h6 class="text-success mb-1">✅ Rekaman Terakhir Disimpan</h6>
+                    <h6 class="text-success mb-1"><i class="bi bi-check-circle-fill me-1"></i> Rekaman Terakhir Disimpan
+                    </h6>
                     <small id="last-record-detail" class="text-muted">RESI... • DURASI...</small>
                 </div>
                 <div>
                     <button class="btn btn-sm btn-outline-danger" onclick="redoRecording()">
-                        🔄 Redo (Rekam Ulang)
+                        <i class="bi bi-arrow-clockwise me-1"></i> Redo (Rekam Ulang)
                     </button>
                     <button class=" btn btn-sm btn-primary" id="btn-view-last" onclick="viewLastRecording()">
-                        📺 Lihat
+                        <i class="bi bi-eye me-1"></i> Lihat
                     </button>
                 </div>
             </div>
@@ -242,7 +337,7 @@
 <!-- Scripts -->
 <script>
     // Configuration
-    const SCAN_RATE = 1000; // Barcode scan rate (ms)
+    const SCAN_RATE = 700; // Barcode scan rate (ms) - quicker polling for easier detect
     const RECORDING_START_GRACE_PERIOD = 5000; // 5 seconds - don't stop immediately after start
     const BARCODE_COOLDOWN = 3000; // 3 seconds - cooldown between barcode detections
 
@@ -258,6 +353,8 @@
     let currentResi = null; // Track current resi being recorded
     let lastBarcodeDetectTime = 0; // For cooldown
     let lastRecordingData = null; // Store last recording data for popup
+    let scanVisualEl = null; // Green scanning overlay
+    let currentZoom = 1.0;
 
     // Sound effects
     const sounds = {
@@ -278,6 +375,16 @@
         }
     }
 
+    // Toggle green overlay to show active scanning
+    function setScanVisual(active) {
+        if (!scanVisualEl) return;
+        if (active) {
+            scanVisualEl.classList.remove('d-none');
+        } else {
+            scanVisualEl.classList.add('d-none');
+        }
+    }
+
     // Helper: update camera usage purpose on server (preview/scan/record)
     function updateCameraUsage(purpose) {
         if (!selectedCameraUrl || !purpose) return;
@@ -290,6 +397,9 @@
 
     document.addEventListener('DOMContentLoaded', function () {
         console.log(">>> [Recording Page] DOM Content Loaded");
+
+        scanVisualEl = document.getElementById('scan-visual-overlay');
+        setScanVisual(false);
 
         loadCameras();
         setupPlatformSelect();
@@ -323,6 +433,54 @@
         };
         waitForSocket();
     });
+
+    // Zoom Functions
+    function adjustZoom(delta) {
+        if (!selectedCameraUrl) return;
+
+        let newZoom = currentZoom + delta;
+        if (newZoom < 1.0) newZoom = 1.0;
+        if (newZoom > 4.0) newZoom = 4.0;
+
+        if (newZoom === currentZoom) return;
+
+        currentZoom = newZoom;
+        sendZoomRequest();
+    }
+
+    function resetZoom() {
+        if (!selectedCameraUrl) return;
+        currentZoom = 1.0;
+        sendZoomRequest();
+    }
+
+    function sendZoomRequest() {
+        if (!selectedCameraUrl) return;
+
+        const indicator = document.getElementById('zoom-indicator');
+        if (currentZoom > 1.0) {
+            indicator.style.display = 'block';
+            indicator.textContent = `Zoom: ${currentZoom.toFixed(1)}x`;
+        } else {
+            indicator.style.display = 'none';
+        }
+
+        fetch('/api/camera/zoom', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                url: selectedCameraUrl,
+                level: currentZoom
+            })
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    console.error('Zoom failed:', data.message);
+                }
+            })
+            .catch(err => console.error('Zoom error:', err));
+    }
 
     // function updateConnectionStatus(status) {
     //     const statusEl = document.getElementById('connection-status');
@@ -416,6 +574,8 @@
             indicator.innerHTML = 'Pilih kamera untuk cek status';
         }
 
+        setScanVisual(false);
+
         // Hide scanner container
         const scannerContainer = document.getElementById('scanner-container');
         if (scannerContainer) scannerContainer.classList.add('d-none');
@@ -425,6 +585,11 @@
 
         // Update reset button visibility
         updateResetButtonVisibility();
+
+        // Hide zoom controls
+        document.getElementById('zoom-container').classList.add('d-none');
+        document.getElementById('zoom-indicator').style.display = 'none';
+        currentZoom = 1.0;
     }
 
 
@@ -590,6 +755,10 @@
             // Camera is online, check visibility
             updateResetButtonVisibility();
 
+            // Show zoom controls
+            document.getElementById('zoom-container').classList.remove('d-none');
+            resetZoom(); // Ensure backend & frontend are synced to 1.0
+
             // Mark usage as preview when stream is up
             updateCameraUsage('preview');
 
@@ -682,6 +851,7 @@
         currentSocket.on('barcode_result', (data) => {
             console.log(">>> [Loop] Barcode result received:", data);
             isWaitingForResponse = false; // Reset gate on response
+            setScanVisual(false);
             const indicator = document.getElementById('camera-status-indicator');
             if (data.success && data.found) {
                 console.log(">>> BARCODE FOUND:", data.barcodes[0].data);
@@ -705,6 +875,16 @@
             // 1. Basic checks
             if (!selectedCameraUrl || inputMethod !== 'camera' || !selectedPlatform) {
                 isWaitingForResponse = false;
+                setScanVisual(false);
+
+                // Update zoom indicator visibility
+                const zInd = document.getElementById('zoom-indicator');
+                if (isCameraVisible && currentZoom > 1.0) {
+                    zInd.style.display = 'block';
+                    zInd.textContent = `Zoom: ${currentZoom.toFixed(1)}x`;
+                } else {
+                    zInd.style.display = 'none';
+                }
 
                 // Only show "Pilih Platform" if camera is VISIBLE (Online)
                 // This prevents overwriting the disconnect error message
@@ -723,6 +903,7 @@
                 if (indicator) {
                     indicator.innerHTML = '<span class="text-danger">🔴 Socket disconnected</span>';
                 }
+                setScanVisual(false);
                 barcodeLoopInterval = setTimeout(checkBarcode, 1000);
                 return;
             }
@@ -734,6 +915,7 @@
                     console.warn(">>> [Loop] Request timed out, resetting gate");
                     isWaitingForResponse = false;
                 } else {
+                    setScanVisual(true);
                     barcodeLoopInterval = setTimeout(checkBarcode, 200); // Check again soon
                     return;
                 }
@@ -763,6 +945,7 @@
             isWaitingForResponse = true;
             lastRequestTime = now;
             console.log(">>> [Loop] Emitting detect_barcode for URL:", selectedCameraUrl);
+            setScanVisual(true);
             currentSocket.emit('detect_barcode', { url: selectedCameraUrl });
 
             // Re-schedule based on SCAN_RATE

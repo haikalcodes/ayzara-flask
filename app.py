@@ -19,6 +19,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import json
 import os
 import threading
+from contextlib import contextmanager
 import time
 import hashlib
 import cv2
@@ -34,6 +35,36 @@ import select
 import re
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import platform
+
+# Lock management for hardware access (webcams)
+# We use per-index locks to prevent one hung camera from blocking all others.
+index_locks = {i: threading.Lock() for i in range(32)}
+global_hardware_lock = threading.Lock() # For IP cams or non-local scans
+
+@contextmanager
+def safe_hardware_lock(url, timeout=5.0):
+    """
+    Acquire a lock based on the camera URL/index.
+    If it's a local camera (digit), use the specific index lock.
+    """
+    lock_to_use = global_hardware_lock
+    if str(url).isdigit():
+        idx = int(url)
+        if idx in index_locks:
+            lock_to_use = index_locks[idx]
+            
+    acquired = lock_to_use.acquire(timeout=timeout)
+    try:
+        yield acquired
+    finally:
+        if acquired:
+            lock_to_use.release()
+
+# Global flags for hardware management
+dshow_failed_once = False
+discovery_lock = threading.Lock()
+discovery_in_progress = False
 
 # ============================================
 # APP INITIALIZATION
@@ -69,6 +100,10 @@ camera_status_lock = threading.Lock()
 # Camera usage tracker: url -> {username, purpose, last_used}
 camera_usage = {}
 camera_usage_lock = threading.Lock()
+
+# Configuration cache
+_project_config_cache = None
+_config_lock = threading.Lock()
 
 
 # ============================================
@@ -124,6 +159,15 @@ class PackingRecord(db.Model):
     )
     
     def to_dict(self):
+        # Calculate thumbnail name based on relative path
+        video_path = self.file_video.replace('\\', '/') if self.file_video else ''
+        thumb_name = ''
+        if video_path:
+            import hashlib
+            # Use MD5 hash of the path to ensure uniqueness
+            path_hash = hashlib.md5(video_path.encode()).hexdigest()
+            thumb_name = f"thumb_{path_hash}.jpg"
+
         return {
             'id': self.id,
             'resi': self.resi,
@@ -132,6 +176,7 @@ class PackingRecord(db.Model):
             'waktu_selesai': self.waktu_selesai.strftime('%Y-%m-%d %H:%M:%S') if self.waktu_selesai else None,
             'durasi_detik': self.durasi_detik,
             'file_video': self.file_video,
+            'thumbnail_name': thumb_name,
             'status': self.status,
             'platform': self.platform,
             'file_size_kb': self.file_size_kb
@@ -151,7 +196,6 @@ class Pegawai(db.Model):
     alamat = db.Column(db.Text)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
     def to_dict(self):
         return {
             'id': self.id,
@@ -499,6 +543,120 @@ def team():
     )
 
 
+@app.route('/api/cameras/detect-local')
+@login_required
+def detect_local_cameras():
+    global dshow_failed_once, discovery_in_progress
+    
+    # EXCLUSIVE ACCESS: Only one discovery at a time, and it signals others to WAIT
+    with discovery_lock:
+        discovery_in_progress = True
+        try:
+            # Reset DSHOW flag to try a fresh start
+            dshow_failed_once = False 
+            available_indices = []
+            max_index_to_test = 10 # Aligned with test_webcam.py
+            
+            # 1. AUDIT & KILL ZOMBIES
+            active_list = []
+            with camera_lock:
+                print(f"[Camera] Active cameras in memory: {list(active_cameras.keys())}")
+                to_purge = []
+                for url, cam in active_cameras.items():
+                    if str(url).isdigit():
+                        is_hung = (time.time() - cam.last_update > 5.0)
+                        if not cam.running or is_hung or cam.consecutive_errors > 5:
+                            print(f"[Camera] Discovery: FORCING CLEANUP of zombie index {url} (Hung: {is_hung}, Errors: {cam.consecutive_errors})")
+                            cam.stop()
+                            to_purge.append(url)
+                for url in to_purge:
+                    if url in active_cameras: del active_cameras[url]
+                
+                # Final check of what's left
+                active_list = [int(u) for u in active_cameras.keys() if str(u).isdigit()]
+                print(f"[Camera] Remaining healthy active indices: {active_list}")
+            
+            # 2. COOL DOWN
+            time.sleep(1.0)
+            
+            # 3. SCAN
+            backends = [
+                ("DirectShow (DSHOW)", cv2.CAP_DSHOW),
+                ("Media Foundation (MSMF)", cv2.CAP_MSMF),
+                ("Default (ANY)", cv2.CAP_ANY)
+            ]
+            
+            print("=== AYZARA WEBCAM DIAGNOSTIC TOOL (INTERNAL) ===")
+            print(f"Mencari kamera lokal (0-10)...")
+
+            found_cameras_log = []
+            for i in range(max_index_to_test):
+                print(f"\n[Index {i}] Mengecek...")
+                
+                # Check if already active
+                if i in active_list:
+                    print(f"  [SUCCESS] Indeks {i} sedang aktif digunakan.")
+                    available_indices.append({'index': i, 'name': f'Local Camera {i} (Aktif)'})
+                    found_cameras_log.append((i, "Aktif/Open"))
+                    continue
+                
+                found_at_index = False
+                for name, backend in backends:
+                    try:
+                        # Attempt to open WITHOUT global lock first to see if it's already held by another process
+                        # but we use safe_hardware_lock internally to be polite to our own threads
+                        with safe_hardware_lock(i, timeout=1.0) as acquired:
+                            if not acquired:
+                                print(f"  [LOCKED ] Indeks {i} sedang dikunci oleh thread lain.")
+                                continue
+                                
+                            # SPECIAL HANDLING for DirectShow C++ exceptions
+                            try:
+                                cap = cv2.VideoCapture(i, backend)
+                            except Exception as e:
+                                if "raised unknown C++ exception" in str(e) or "DSHOW" in name:
+                                    print(f"  [WARN   ] DSHOW exception at Index {i}, cooling and retrying...")
+                                    time.sleep(0.5)
+                                    cap = cv2.VideoCapture(i, cv2.CAP_MSMF) # Direct fallback
+                                else:
+                                    raise e
+
+                            if cap and cap.isOpened():
+                                time.sleep(1.0) # Longer delay for stabilization in app context
+                                ret, _ = cap.read()
+                                if ret:
+                                    print(f"  [SUCCESS] Terdeteksi via {name}")
+                                    available_indices.append({'index': i, 'name': f'Local Camera {i}'})
+                                    found_cameras_log.append((i, name))
+                                    found_at_index = True
+                                    cap.release()
+                                    break
+                                else:
+                                    print(f"  [FAILED ] Terbuka via {name} tapi gagal baca frame")
+                                cap.release()
+                            else:
+                                # Don't print SKIP for every backend unless it's Default to keep logs cleaner
+                                if backend == cv2.CAP_ANY:
+                                    print(f"  [SKIP   ] Tidak ditemukan di semua backend.")
+                    except Exception as e:
+                        print(f"  [ERROR  ] Exception via {name}: {e}")
+                
+                if not found_at_index and i not in active_list:
+                    print(f"[Index {i}] Tidak ada kamera yang ditemukan.")
+                
+            print("\n" + "="*35)
+            if not found_cameras_log:
+                print("HASIL: TIDAK ADA KAMERA DITEMUKAN")
+            else:
+                print(f"HASIL: Ditemukan {len(found_cameras_log)} kamera:")
+                for idx, bname in found_cameras_log:
+                    print(f" - Index {idx} ({bname})")
+            print("="*35 + "\n")
+            return jsonify({'cameras': available_indices})
+        finally:
+            discovery_in_progress = False
+
+
 @app.route('/camera')
 @login_required
 def camera():
@@ -516,6 +674,27 @@ def rekam_packing():
         platforms=config.PLATFORMS,
         default_rtsp_url=config.DEFAULT_RTSP_URL
     )
+
+
+@app.route('/api/camera/zoom', methods=['POST'])
+@login_required
+def api_camera_zoom():
+    """Set zoom level for a specific camera"""
+    data = request.get_json()
+    url = data.get('url')
+    level = float(data.get('level', 1.0))
+    
+    # Range check
+    level = max(1.0, min(4.0, level))
+    
+    with camera_lock:
+        if url in active_cameras:
+            cam = active_cameras[url]
+            cam.zoom_level = level
+            print(f"[Camera] Zoom level set to {level} for {url}")
+            return jsonify({'success': True, 'zoom_level': level})
+    
+    return jsonify({'success': False, 'message': 'Camera not active'}), 404
 
 
 @app.route('/statistics')
@@ -614,12 +793,15 @@ def camera_settings():
 
 
 def _save_project_config(cfg):
-    """Save config.json ke project utama"""
+    """Save config.json ke project utama dengan caching"""
+    global _project_config_cache
     try:
-        if config.CONFIG_FILE.exists():
-            with open(config.CONFIG_FILE, 'w', encoding='utf-8') as f:
-                json.dump(cfg, f, indent=2, ensure_ascii=False)
-            return True
+        with _config_lock:
+            if config.CONFIG_FILE.exists():
+                with open(config.CONFIG_FILE, 'w', encoding='utf-8') as f:
+                    json.dump(cfg, f, indent=2, ensure_ascii=False)
+                _project_config_cache = cfg.copy()
+                return True
     except Exception as e:
         print(f"Error saving config: {e}")
     return False
@@ -804,14 +986,16 @@ def perform_camera_discovery(timeout=3.0):
 @login_required
 @admin_required
 def api_cameras_discover():
-    """Discover cameras on the local network"""
-    print(">>> [Discovery] Starting camera discovery...")
-    found = perform_camera_discovery()
-    print(f">>> [Discovery] Found {len(found)} potential devices")
-    return jsonify({
-        'success': True,
-        'cameras': found
-    })
+    """Discover cameras on the local network (IP Cameras)"""
+    # Use discovery_lock to avoid clashing with local webcam detection
+    with discovery_lock:
+        print(">>> [Discovery] Starting IP camera discovery (Exclusive Lock acquired)...")
+        found = perform_camera_discovery()
+        print(f">>> [Discovery] Found {len(found)} potential devices")
+        return jsonify({
+            'success': True,
+            'cameras': found
+        })
 
 
 # ============================================
@@ -960,7 +1144,40 @@ def is_camera_online(url):
     import socket
     from urllib.parse import urlparse
 
-    # 1. Try socket check first (fastest)
+    # 1. Handle local device indices
+    if str(url).isdigit():
+        try:
+            # Use hardware lock with timeout for status checks
+            with safe_hardware_lock(url, timeout=2.0) as acquired:
+                if not acquired:
+                    return False # Treat as offline if hardware is busy
+                    
+                v_src = int(url)
+                # Try multiple backends
+                global dshow_failed_once
+                backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF]
+                if dshow_failed_once:
+                    backends = [cv2.CAP_MSMF]
+                
+                success = False
+                for backend in backends:
+                    try:
+                        cap = cv2.VideoCapture(v_src, backend)
+                        if cap and cap.isOpened():
+                            time.sleep(0.1)
+                            ret, _ = cap.read()
+                            success = ret
+                            cap.release()
+                            if success: break
+                        if cap: cap.release()
+                    except:
+                        if backend == cv2.CAP_DSHOW: dshow_failed_once = True
+            return success
+        except Exception as e:
+            print(f"[Camera] is_camera_online exception for {url}: {e}")
+            return False
+
+    # 2. Try socket check first (fastest) for network cameras
     try:
         parsed = urlparse(url)
         if parsed.hostname and parsed.port:
@@ -981,7 +1198,7 @@ def is_camera_online(url):
         # If socket fails, it might be UDP or blocked, but usually means offline
         pass
 
-    # 2. Use ffprobe for a definitive check (short timeout)
+    # 3. Use ffprobe for a definitive check (short timeout)
     try:
         project_cfg = _load_project_config()
         ffmpeg_path = project_cfg.get('ffmpeg_path', 'ffmpeg')
@@ -1018,13 +1235,29 @@ def _check_single_camera_status(url):
             base_status = None
 
     if base_status is None:
-        # Actually check if online
-        online = is_camera_online(url)
-        base_status = {
-            'online': online,
-            'last_checked': time.time(),
-            'standby': True
-        }
+        # SOFT STATUS for Local Cameras:
+        # Avoid calling is_camera_online() for local indices to prevent driver hangs.
+        # If it's a digit, and wasn't in active_cameras (checked above), we don't dare open it.
+        # This keeps the hardware released and ready for "Discovery" or "Manual Start".
+        if str(url).isdigit():
+            # For local cams, if not streaming, we just assume it's "Ready" (Show as Online but in standby)
+            # or we could show as Offline if we want to be strict.
+            # Let's show as Online/Standby to prevent confusing "Connection Failed" alerts.
+            base_status = {
+                'online': True, # Soft assumption
+                'last_checked': time.time(),
+                'standby': True,
+                'source_type': 'local'
+            }
+        else:
+            # Actually check if online for IP Cameras
+            online = is_camera_online(url)
+            base_status = {
+                'online': online,
+                'last_checked': time.time(),
+                'standby': True,
+                'source_type': 'ip'
+            }
 
     # Enrich with usage info
     in_use = False
@@ -1143,29 +1376,74 @@ class VideoCamera(object):
         self.lock = threading.Lock()
         self.running = True
         self.last_access = time.time()
+        self.last_update = time.time() # Watchdog timestamp
         self.consecutive_errors = 0 # Track errors
+        self.zoom_level = 1.0 # NEW: Zoom level (1.0 = no zoom)
         
         print(f"[Camera] Initializing stream for: {url}")
-        self.video = cv2.VideoCapture(url)
-        if not self.video.isOpened():
-             print(f"[Camera] FAILED to open stream: {url}")
-             self.running = False
-             return
-
-        # FORCE VERIFY: Read one frame to ensure stream is actually alive
-        # Many IP cameras return True for isOpened() even if stream is dead
-        print(f"[Camera] Verifying stream content for: {url}")
-        success, frame = self.video.read()
-        if not success:
-             print(f"[Camera] FAILED to read initial frame: {url}")
-             self.running = False
-             self.video.release()
-             return
-
-        print(f"[Camera] Stream verification SUCCESS: {url}")
         
-        # Start background thread
-        self.thread = threading.Thread(target=self.update, args=())
+        # Handle local device indices (e.g. "0", "1")
+        with discovery_lock:
+            with safe_hardware_lock(url, timeout=10.0) as acquired:
+                if not acquired:
+                    print(f"[Camera] TIMEOUT waiting for hardware lock: {url}")
+                    self.running = False
+                    return
+
+                if str(url).isdigit():
+                    global dshow_failed_once
+                    v_src = int(url)
+                    
+                    # RE-INITIALIZATION LOOP (3 attempts with cooling)
+                    for attempt in range(3):
+                        self.video = None
+                        # Cycle backends: DSHOW, MSMF, then ANY (Raw)
+                        backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]
+                        
+                        for backend in backends:
+                            try:
+                                print(f"[Camera] Init (Attempt {attempt+1}): {url} via {backend}")
+                                temp_cap = cv2.VideoCapture(v_src, backend)
+                                if temp_cap and temp_cap.isOpened():
+                                    # Stabilization delay: Windows needs longer sometimes
+                                    time.sleep(0.4) 
+                                    ret, _ = temp_cap.read()
+                                    if ret:
+                                        self.video = temp_cap
+                                        print(f"[Camera] SUCCESS: {url} at {backend}")
+                                        break
+                                if temp_cap: temp_cap.release()
+                                time.sleep(0.2)
+                            except Exception as e:
+                                print(f"[Camera] Exception backend {backend}: {e}")
+                                time.sleep(0.5)
+                        
+                        if self.video: break
+                        print(f"[Camera] Attempt {attempt+1} failed, cooling down...")
+                        time.sleep(1.0) # Cooling between full attempts
+                else:
+                    v_src = url
+                    self.video = cv2.VideoCapture(v_src)
+                
+                if self.video is None or not self.video.isOpened():
+                    print(f"[Camera] FINAL FAILURE: {url}")
+                    if self.video: self.video.release()
+                    self.running = False
+                    return
+
+                # FORCE VERIFY: Read one frame to ensure stream is actually alive
+                print(f"[Camera] Verifying stream content for: {url}")
+                success, frame = self.video.read()
+                if not success:
+                    print(f"[Camera] FAILED to read initial frame: {url}")
+                    self.running = False
+                    self.video.release()
+                    return
+
+            print(f"[Camera] Stream verification SUCCESS: {url}")
+            
+            # Start background thread
+            self.thread = threading.Thread(target=self.update, args=())
         self.thread.daemon = True
         self.thread.start()
 
@@ -1173,24 +1451,70 @@ class VideoCamera(object):
         self.stop()
 
     def stop(self):
-        """Explicitly stop the camera stream"""
+        """Explicitly stop the camera stream and FORCE hardware release"""
+        print(f"[Camera] FORCING stop and release for: {self.url}")
         self.running = False
-        if self.video and self.video.isOpened():
-            self.video.release()
+        
+        # We attempt to acquire a lock, but if it's held by a hung thread, 
+        # we MUST release the hardware anyway to unblock the driver.
+        acquired = False
+        try:
+            acquired = safe_hardware_lock(self.url, timeout=2.0).__enter__()
+            if self.video:
+                if self.video.isOpened():
+                    self.video.release()
+                self.video = None
+            if acquired:
+                time.sleep(0.3) # Cooling for driver
+        except Exception as e:
+            print(f"[Camera] Error during stop() lock/release for {self.url}: {e}")
+        finally:
+            # Absolute final attempt if blocked
+            if self.video:
+                try: 
+                    self.video.release()
+                    self.video = None
+                except: pass
+            if acquired:
+                try: safe_hardware_lock(self.url, timeout=0).__exit__(None, None, None)
+                except: pass
 
     def update(self):
         while self.running:
             try:
                 # If no one accessed this camera for 30 seconds, stop to save resources
                 # reduced to 10s for snappier cleanup
+                # WAIT if discovery is in progress to avoid hardware contention
+                if discovery_in_progress:
+                    time.sleep(1.0)
+                    continue
+
                 if time.time() - self.last_access > 10:
                     print(f"[Camera] Stopping inactive stream: {self.url}")
-                    self.running = False
+                    self.stop()
                     break
                     
+                self.last_update = time.time() # Mark heartbeat before read
                 success, frame = self.video.read()
+                self.last_update = time.time() # Mark heartbeat after read
                 if success:
+                    # NEW: Apply digital zoom if level > 1.0
                     with self.lock:
+                        if self.zoom_level > 1.0:
+                            h, w = frame.shape[:2]
+                            # Calculate dimensions after crop
+                            new_h, new_w = int(h / self.zoom_level), int(w / self.zoom_level)
+                            
+                            # Center crop
+                            top = (h - new_h) // 2
+                            left = (w - new_w) // 2
+                            
+                            # Perform crop
+                            cropped = frame[top:top+new_h, left:left+new_w]
+                            
+                            # Resize back to original to keep UI/Recording consistent
+                            frame = cv2.resize(cropped, (w, h), interpolation=cv2.INTER_LINEAR)
+                        
                         self.last_frame = frame
                         self.consecutive_errors = 0 # Reset error count
                 else:
@@ -1205,25 +1529,69 @@ class VideoCamera(object):
                         break
                     
                     # Reconnection logic
-                    self.video.release()
-                    time.sleep(1) # Reduced from 2s
-                    self.video = cv2.VideoCapture(self.url)
-                    print(f"[Camera] Reconnecting... ({self.consecutive_errors})")
+                    # Check discovery again before trying to open hardware
+                    if discovery_in_progress: continue
+                    
+                    with safe_hardware_lock(self.url, timeout=5.0) as acquired:
+                        if acquired:
+                            if self.video and self.video.isOpened():
+                                self.video.release()
+                            time.sleep(1) # Reduced from 2s
+                            
+                            # Handle local device indices
+                            if str(self.url).isdigit():
+                                global dshow_failed_once
+                                v_src = int(self.url)
+                                backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF]
+                                if dshow_failed_once:
+                                    backends = [cv2.CAP_MSMF]
+                                
+                                self.video = None
+                                for backend in backends:
+                                    try:
+                                        print(f"[Camera] Reconnect: trying backend {backend} for index {v_src}")
+                                        temp_cap = cv2.VideoCapture(v_src, backend)
+                                        if temp_cap and temp_cap.isOpened():
+                                            self.video = temp_cap
+                                            print(f"[Camera] Reconnect SUCCESS with backend {backend}")
+                                            break
+                                        if temp_cap: temp_cap.release()
+                                    except Exception as e:
+                                        print(f"[Camera] Reconnect backend {backend} failed: {e}")
+                                        if backend == cv2.CAP_DSHOW: dshow_failed_once = True
+                            else:
+                                v_src = self.url
+                                self.video = cv2.VideoCapture(v_src)
+                            print(f"[Camera] Reconnecting {self.url} (Success: {self.video is not None and self.video.isOpened()})")
+                        else:
+                            print(f"[Camera] Reconnect locked out for {self.url}")
+                            # Skip this attempt if locked to avoid hung threads
             except Exception as e:
-                print(f"[Camera] Error: {e}")
-                self.consecutive_errors += 1
-                
+                print(f"[Camera] Error for {self.url}: {e}")
                 self.consecutive_errors += 1
                 
                 # Stop if too many errors
                 if self.consecutive_errors > 2:
-                    print(f"[Camera] Too many errors, stopping stream: {self.url}")
+                    print(f"[Camera] Too many fatal errors, stopping stream: {self.url}")
                     self.running = False
                     break
                     
                 time.sleep(1)
             
             time.sleep(0.05) # Limit to ~20 FPS reading
+            
+        # Ensure cleanup happens when the loop ends
+        print(f"[Camera] Thread exiting for {self.url}")
+        # Final cleanup attempt just in case stop() wasn't called externally
+        if self.running or self.video:
+            self.stop()
+        
+        # Self-purge from active_cameras manager
+        with camera_lock:
+            if self.url in active_cameras and active_cameras[self.url] == self:
+                print(f"[Camera] Purging {self.url} from active manager.")
+                try: del active_cameras[self.url]
+                except: pass
 
     def get_frame(self):
         self.last_access = time.time()
@@ -1253,27 +1621,33 @@ camera_lock = threading.Lock()
 
 def get_camera_stream(url):
     with camera_lock:
-        # Check if exists and is running
+        # Check if exists and is really alive
         if url in active_cameras:
             cam = active_cameras[url]
-            if cam.running:
-                # print(f"[Camera] Reusing existing stream: {url}")
+            # HANG DETECTION: If no heartbeat for 5 seconds
+            is_hung = (time.time() - cam.last_update > 5.0)
+            
+            # Extra safety: If thread exists but running=False or it's been an error-fest or hung
+            if cam.running and not is_hung and cam.consecutive_errors < 5:
                 return cam
             else:
-                # It stopped, remove and recreate
-                print(f"[Camera] Stream stopped, removing: {url}")
+                print(f"[Camera] Dead/Stuck stream detected ({url}, Hung: {is_hung}), FORCING CLEANUP.")
+                cam.stop() # Force immediate release
                 del active_cameras[url]
+                # CRITICAL: Sleep to let driver finish release
+                time.sleep(1.0) 
         
-        print(f"[Camera] Starting new stream: {url}")
-        new_cam = VideoCamera(url)
-        
-        # Check if initialization succeeded
-        if not new_cam.running:
-            print(f"[Camera] Failed to initialize camera: {url}")
+        # New connection attempt
+        try:
+            print(f"[Camera] Starting fresh stream for: {url}")
+            new_cam = VideoCamera(url)
+            if new_cam.running:
+                active_cameras[url] = new_cam
+                return new_cam
             return None
-            
-        active_cameras[url] = new_cam
-        return new_cam
+        except Exception as e:
+            print(f"[Camera] Fatal camera init failure: {e}")
+            return None
 
 def gen_frames(camera):
     error_count = 0
@@ -1393,6 +1767,60 @@ from flask_login import login_required, current_user
 from opencv_recorder import record_from_camera_stream
 from recording_storage import get_recording_directory, find_next_index, calculate_sha256, generate_metadata_json, save_metadata_json
 
+def _decode_barcodes_from_frame(frame):
+    """
+    Aggressive decoding helper to make scanning less picky.
+    Tries multiple pre-processing variants to improve contrast and readability.
+    """
+    results = []
+    seen = set()
+
+    try:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    except Exception as e:
+        print(f">>> [Barcode] Failed to convert frame: {e}")
+        return results
+
+    variants = []
+    variants.append(gray)
+
+    try:
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(gray)
+        variants.append(enhanced)
+
+        blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
+        variants.append(blurred)
+
+        _, otsu = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        variants.append(otsu)
+    except Exception as e:
+        print(f">>> [Barcode] Preprocess failed: {e}")
+
+    for idx, img in enumerate(variants):
+        try:
+            barcodes = decode(img)
+            if barcodes:
+                print(f">>> [Barcode] Variant {idx} found {len(barcodes)} barcode(s)")
+            for barcode in barcodes:
+                try:
+                    data_str = barcode.data.decode('utf-8')
+                    if data_str in seen:
+                        continue
+                    seen.add(data_str)
+                    results.append({
+                        'data': data_str,
+                        'type': barcode.type
+                    })
+                    print(f">>> [Barcode] DECODED: {data_str} ({barcode.type}) via variant {idx}")
+                except Exception as e:
+                    print(f">>> [Barcode] Decode error: {e}")
+        except Exception as e:
+            print(f">>> [Barcode] Variant {idx} error: {e}")
+
+    return results
+
+
 @app.route('/api/barcode/detect', methods=['POST'])
 @login_required
 def api_barcode_detect():
@@ -1426,36 +1854,13 @@ def api_barcode_detect():
         print(">>> [API] ERROR: No frame available from camera")
         return jsonify({'success': False, 'message': 'No frame available'}), 503
         
-    # Detect barcode
+    # Detect barcode with robust pipeline
     try:
-        # Gray scale for better detection
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        # DEBUG LOGGING
-        height, width = gray.shape
-        # print(f">>> [Barcode] Scanning frame {width}x{height}...") 
-        
-        barcodes = decode(gray)
-        
-        if barcodes:
-            print(f">>> [Barcode] FOUND {len(barcodes)} barcodes!")
-        
-        results = []
-        for barcode in barcodes:
-            try:
-                data_str = barcode.data.decode('utf-8')
-                print(f">>> [Barcode] DECODED: {data_str} ({barcode.type})")
-                results.append({
-                    'data': data_str,
-                    'type': barcode.type
-                })
-            except:
-                pass
-            
+        results = _decode_barcodes_from_frame(frame)
+
         if results:
             return jsonify({'success': True, 'found': True, 'barcodes': results})
         else:
-             # print(">>> [Barcode] No barcodes found in this frame")
              return jsonify({'success': True, 'found': False})
              
     except Exception as e:
@@ -1909,24 +2314,54 @@ def api_cameras_test():
     rtsp_transport = project_cfg.get('rtsp_transport', 'tcp')
     
     try:
-        # Test connection with 2 second timeout
-        # Prepare command
-        cmd = [ffmpeg_path]
-        
-        # Only add rtsp_transport if URL starts with rtsp
-        if url.lower().startswith('rtsp'):
-            cmd.extend(['-rtsp_transport', rtsp_transport])
+        # Test connection
+        if str(url).isdigit():
+            # Local camera test
+            try:
+                with safe_hardware_lock(url, timeout=10.0) as acquired:
+                    if not acquired:
+                        return jsonify({'success': False, 'message': 'Hardware sibuk (timeout 10s). Coba lagi.'})
+                    
+                    global dshow_failed_once
+                    v_src = int(url)
+                    backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF]
+                    if dshow_failed_once:
+                        backends = [cv2.CAP_MSMF]
+                        
+                    success = False
+                    for backend in backends:
+                        try:
+                            cap = cv2.VideoCapture(v_src, backend)
+                            if cap and cap.isOpened():
+                                time.sleep(0.1)
+                                ret, _ = cap.read()
+                                if ret:
+                                    success = True
+                                    cap.release()
+                                    break
+                            if cap: cap.release()
+                        except:
+                            if backend == cv2.CAP_DSHOW: dshow_failed_once = True
+            except Exception as e:
+                print(f"[Camera] api_cameras_test exception: {e}")
+                success = False
+        else:
+            # IP Camera test via FFmpeg
+            cmd = [ffmpeg_path]
             
-        cmd.extend([
-            '-i', url,
-            '-t', '2',
-            '-f', 'null',
-            '-'
-        ])
-        
-        result = subprocess.run(cmd, capture_output=True, timeout=15)
-        
-        success = result.returncode == 0
+            # Only add rtsp_transport if URL starts with rtsp
+            if url.lower().startswith('rtsp'):
+                cmd.extend(['-rtsp_transport', rtsp_transport])
+                
+            cmd.extend([
+                '-i', url,
+                '-t', '2',
+                '-f', 'null',
+                '-'
+            ])
+            
+            result = subprocess.run(cmd, capture_output=True, timeout=15)
+            success = result.returncode == 0
         
         # UPDATE CACHE
         with status_cache_lock:
@@ -1939,13 +2374,16 @@ def api_cameras_test():
         if success:
             return jsonify({'success': True, 'message': 'Koneksi berhasil'})
         else:
-            stderr = result.stderr.decode('utf-8', errors='ignore')
-            if 'Connection refused' in stderr:
-                msg = 'Koneksi ditolak - periksa IP dan port'
-            elif 'timeout' in stderr.lower():
-                msg = 'Timeout - periksa koneksi jaringan'
+            if not str(url).isdigit() and 'result' in locals():
+                stderr = result.stderr.decode('utf-8', errors='ignore')
+                if 'Connection refused' in stderr:
+                    msg = 'Koneksi ditolak - periksa IP dan port'
+                elif 'timeout' in stderr.lower():
+                    msg = 'Timeout - periksa koneksi jaringan'
+                else:
+                    msg = f'Error (code {result.returncode})'
             else:
-                msg = f'Error (code {result.returncode})'
+                msg = 'Gagal terhubung ke kamera hardware/lokal'
             return jsonify({'success': False, 'message': msg})
     
     except subprocess.TimeoutExpired:
@@ -2117,16 +2555,22 @@ def api_pegawai_detail(id):
 
 
 def _load_project_config():
-    """Load config.json dari project utama untuk RTSP dan FFmpeg settings"""
-    try:
-        cfg_path = Path(config.CONFIG_FILE)
-        if cfg_path.exists():
-            with open(cfg_path, 'r') as f:
-                # print(f"Loading config from: {cfg_path}")
-                return json.load(f)
-    except Exception as e:
-        print(f"Error loading config: {e}")
-        pass
+    """Load config.json dari project utama dengan caching"""
+    global _project_config_cache
+    
+    with _config_lock:
+        if _project_config_cache is not None:
+            return _project_config_cache.copy()
+            
+        try:
+            cfg_path = Path(config.CONFIG_FILE)
+            if cfg_path.exists():
+                with open(cfg_path, 'r', encoding='utf-8') as f:
+                    _project_config_cache = json.load(f)
+                    return _project_config_cache.copy()
+        except Exception as e:
+            print(f"Error loading config: {e}")
+    
     return {}
 
 
@@ -2306,10 +2750,11 @@ def api_generate_thumbnails_batch():
                 video_path_str = video_path_str[len('recordings/'):]
             
             video_path = config.RECORDINGS_FOLDER / video_path_str
-            video_filename = Path(video_path_str).name
             
-            # Path thumbnail
-            thumb_filename = f"thumb_{video_filename.replace('.mp4', '.jpg')}"
+            # Path thumbnail - NEW: Use hash of relative path for uniqueness
+            import hashlib
+            path_hash = hashlib.md5(record.file_video.replace('\\', '/').encode()).hexdigest()
+            thumb_filename = f"thumb_{path_hash}.jpg"
             thumb_path = config.THUMBNAILS_FOLDER / thumb_filename
             
             # Skip jika thumbnail sudah ada
@@ -2578,38 +3023,15 @@ def handle_detect_barcode(data):
         emit('barcode_result', {'success': False, 'message': 'Frame not available'})
         return
         
-    # Detect barcode
+    # Detect barcode with robust pipeline
     try:
-        print(">>> [SOCKET] Converting frame to grayscale...")
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        print(">>> [SOCKET] Decoding barcodes...")
-        barcodes = decode(gray)
-        
-        print(f">>> [SOCKET] Found {len(barcodes)} barcode(s)")
-        
-        if barcodes:
-            results = []
-            for barcode in barcodes:
-                try:
-                    data_str = barcode.data.decode('utf-8')
-                    print(f">>> [SocketIO] FOUND: {data_str} (type: {barcode.type})")
-                    results.append({
-                        'data': data_str,
-                        'type': barcode.type
-                    })
-                except Exception as e:
-                    print(f">>> [SOCKET] Error decoding barcode: {e}")
-                    pass
-            
-            if results:
-                print(f">>> [SOCKET] Sending success response with {len(results)} barcode(s)")
-                emit('barcode_result', {'success': True, 'found': True, 'barcodes': results})
-            else:
-                print(">>> [SOCKET] No valid barcodes decoded, sending not found")
-                emit('barcode_result', {'success': True, 'found': False})
+        print(">>> [SOCKET] Decoding barcodes with robust pipeline...")
+        results = _decode_barcodes_from_frame(frame)
+
+        if results:
+            print(f">>> [SOCKET] Sending success response with {len(results)} barcode(s)")
+            emit('barcode_result', {'success': True, 'found': True, 'barcodes': results})
         else:
-            # ALWAYS RESPOND so client gate resets
             print(">>> [SOCKET] No barcodes detected, sending not found")
             emit('barcode_result', {'success': True, 'found': False})
              

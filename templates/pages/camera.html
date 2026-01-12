@@ -36,6 +36,20 @@
                     <!-- Live Stream Image (Hidden initially) -->
                     <img id="liveStream" src="" class="img-fluid d-none"
                         style="max-height: 500px; width: 100%; object-fit: contain;" alt="Live Stream">
+
+                    <!-- Zoom Controls -->
+                    <div id="zoomContainer" class="zoom-controls d-none">
+                        <button class="zoom-btn" onclick="adjustZoom(0.5)" title="Zoom In">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                        <button class="zoom-btn" onclick="resetZoom()" title="Reset Zoom">
+                            <i class="bi bi-aspect-ratio"></i>
+                        </button>
+                        <button class="zoom-btn" onclick="adjustZoom(-0.5)" title="Zoom Out">
+                            <i class="bi bi-dash-lg"></i>
+                        </button>
+                    </div>
+                    <div id="zoomIndicator" class="zoom-info">Zoom: 1.0x</div>
                 </div>
 
                 <!-- ALERT FEEDBACK AREA -->
@@ -126,11 +140,66 @@
         </div>
     </div>
 </div>
+<style>
+    .zoom-controls {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        z-index: 100;
+        transition: opacity 0.3s;
+    }
+
+    .zoom-btn {
+        width: 45px;
+        height: 45px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    .zoom-btn:hover {
+        background: rgba(13, 110, 253, 0.6);
+        transform: scale(1.1);
+    }
+
+    .zoom-btn:active {
+        transform: scale(0.9);
+    }
+
+    .zoom-info {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        padding: 5px 15px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        pointer-events: none;
+        z-index: 100;
+        display: none;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    }
+</style>
 
 <script>
     // Global variables
     let selectedCameraUrl = '';
     let healthCheckInterval = null;
+    let currentZoom = 1.0;
 
     // Load cameras when page loads
     document.addEventListener('DOMContentLoaded', function () {
@@ -251,6 +320,11 @@
             if (select) select.value = "";
             selectedCameraUrl = '';
         }
+
+        // Hide zoom controls
+        document.getElementById('zoomContainer').classList.add('d-none');
+        document.getElementById('zoomIndicator').style.display = 'none';
+        currentZoom = 1.0;
     }
 
     function checkCamera() {
@@ -345,6 +419,10 @@
             document.getElementById('btnCheck').classList.add('d-none');
             document.getElementById('btnCapture').classList.remove('d-none');
             document.getElementById('btnReset').classList.remove('d-none');
+
+            // Show zoom controls
+            document.getElementById('zoomContainer').classList.remove('d-none');
+            resetZoom();
         };
 
         img.onerror = function () {
@@ -514,6 +592,52 @@
                     btnCapture.classList.remove('d-none');
                 }
             });
+    }
+
+    // Zoom Functions
+    function adjustZoom(delta) {
+        if (!selectedCameraUrl) return;
+
+        let newZoom = currentZoom + delta;
+        if (newZoom < 1.0) newZoom = 1.0;
+        if (newZoom > 4.0) newZoom = 4.0;
+
+        if (newZoom === currentZoom) return;
+
+        currentZoom = newZoom;
+        sendZoomRequest();
+    }
+
+    function resetZoom() {
+        if (!selectedCameraUrl) return;
+        currentZoom = 1.0;
+        sendZoomRequest();
+    }
+
+    function sendZoomRequest() {
+        if (!selectedCameraUrl) return;
+
+        const indicator = document.getElementById('zoomIndicator');
+        if (currentZoom > 1.0) {
+            indicator.style.display = 'block';
+            indicator.textContent = `Zoom: ${currentZoom.toFixed(1)}x`;
+        } else {
+            indicator.style.display = 'none';
+        }
+
+        fetch('/api/camera/zoom', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                url: selectedCameraUrl,
+                level: currentZoom
+            })
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) console.error('Zoom failed:', data.message);
+            })
+            .catch(err => console.error('Zoom error:', err));
     }
 </script>
 {% endblock %}

@@ -38,7 +38,7 @@
   "brand_name": "AYZARA",
   "camera_list": [
     {
-      "id": 2,
+      "id": 1,
       "name": "DroidCam (192.168.43.1)",
       "url": "http://192.168.43.1:4747/mjpegfeed",
       "enabled": true

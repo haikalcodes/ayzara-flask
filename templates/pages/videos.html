@@ -40,7 +40,7 @@
                             <div id="camera-search-placeholder"
                                 class="d-flex flex-column justify-content-center align-items-center h-100 text-muted p-4"
                                 style="min-height: 200px;">
-                                <i class="fs-1 mb-2">📷</i>
+                                <i class="fs-1 mb-2 bi bi-camera text-muted"></i>
                                 <h6>Pilih Kamera</h6>
                                 <p class="small mb-0">Pilih kamera di bawah untuk mulai scan</p>
                             </div>
@@ -140,11 +140,10 @@
             pegawai: "{{ rec.pegawai }}",
             platform: "{{ rec.platform }}",
             time: "{{ rec.waktu_mulai }}",
-            json: "/recordings/{{ video_relative|replace(".mp4", ".json") }}"
+            json: "/recordings/{{ video_relative|replace(".mp4", ".json") if video_relative else "" }}"
         })'>
         <div class="video-thumbnail">
-            {% set thumb_name = 'thumb_' + video_filename.replace('.mp4', '.jpg') if video_filename else '' %}
-            <img src="/uploads/thumbnails/{{ thumb_name }}" alt="Thumbnail"
+            <img src="/uploads/thumbnails/{{ rec.thumbnail_name }}" alt="Thumbnail"
                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                 style="width:100%; height:100%; object-fit:cover;">
             <div class="thumbnail-fallback"
@@ -157,35 +156,35 @@
             {% endif %}
         </div>
         <div class="video-info">
-            <div class="video-resi">📦 {{ rec.resi }}</div>
+            <div class="video-resi"><i class="bi bi-box-seam me-1"></i> {{ rec.resi }}</div>
             <div class="video-meta">
                 <span class="badge badge-platform">{{ rec.platform }}</span>
-                <span class="ms-2">👤 {{ rec.pegawai }}</span>
+                <span class="ms-2"><i class="bi bi-person me-1"></i> {{ rec.pegawai }}</span>
             </div>
             <div class="video-meta mt-1">
                 <i class="bi bi-calendar me-1"></i>{{ rec.waktu_mulai[:16] if rec.waktu_mulai else '-' }}
                 {% if rec.file_size_kb and rec.file_size_kb > 1024 %}
-                <span class="ms-2">💾 {{ (rec.file_size_kb / 1024)|round(1) }} MB</span>
+                <span class="ms-2"><i class="bi bi-hdd me-1"></i> {{ (rec.file_size_kb / 1024)|round(1) }} MB</span>
                 {% elif rec.file_size_kb and rec.file_size_kb > 0 %}
-                <span class="ms-2">💾 {{ rec.file_size_kb }} KB</span>
+                <span class="ms-2"><i class="bi bi-hdd me-1"></i> {{ rec.file_size_kb }} KB</span>
                 {% else %}
-                <span class="ms-2 text-warning">⚠️ 0 KB</span>
+                <span class="ms-2 text-warning"><i class="bi bi-exclamation-triangle me-1"></i> 0 KB</span>
                 {% endif %}
             </div>
             <!-- Share buttons -->
             <div class="mt-2">
                 <button class="btn btn-sm btn-glass"
-                    onclick="event.stopPropagation(); shareToSocial('whatsapp', '/recordings/{{ rec.file_video.split('/')[-1] if rec.file_video else '' }}', '{{ rec.resi }}')"
+                    onclick="event.stopPropagation(); shareToSocial('whatsapp', '/recordings/{{ video_filename }}', '{{ rec.resi }}')"
                     title="Share WhatsApp">
                     <i class="bi bi-whatsapp"></i>
                 </button>
                 <button class="btn btn-sm btn-glass"
-                    onclick="event.stopPropagation(); shareToSocial('telegram', '/recordings/{{ rec.file_video.split('/')[-1] if rec.file_video else '' }}', '{{ rec.resi }}')"
+                    onclick="event.stopPropagation(); shareToSocial('telegram', '/recordings/{{ video_filename }}', '{{ rec.resi }}')"
                     title="Share Telegram">
                     <i class="bi bi-telegram"></i>
                 </button>
                 <button class="btn btn-sm btn-glass"
-                    onclick="event.stopPropagation(); shareToSocial('copy', '/recordings/{{ rec.file_video.split('/')[-1] if rec.file_video else '' }}', '{{ rec.resi }}')"
+                    onclick="event.stopPropagation(); shareToSocial('copy', '/recordings/{{ video_filename }}', '{{ rec.resi }}')"
                     title="Copy Link">
                     <i class="bi bi-link-45deg"></i>
                 </button>
@@ -195,7 +194,7 @@
     {% else %}
     <div class="col-12">
         <div class="card text-center p-5">
-            <div class="stat-icon mb-3">🎬</div>
+            <div class="stat-icon mb-3"><i class="bi bi-people"></i></div>
             <h5>Belum ada video</h5>
             <p class="text-muted">Recording video akan muncul di sini</p>
         </div>
@@ -653,7 +652,7 @@
 
     function openVideoModal(data) {
         // Set basic info
-        document.getElementById('modalVideoTitle').textContent = `📦 ${data.resi}`;
+        document.getElementById('modalVideoTitle').innerHTML = `<i class="bi bi-box-seam me-2"></i> ${data.resi}`;
         document.getElementById('modalVideoSubtitle').textContent = `${data.platform} • ${data.pegawai}`;
 
         // Update Metadata

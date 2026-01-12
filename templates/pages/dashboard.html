@@ -8,28 +8,28 @@
 <div class="row g-4 mb-4">
     <div class="col-md-3">
         <div class="stat-card">
-            <div class="stat-icon">📦</div>
+            <div class="stat-icon"><i class="bi bi-box-seam"></i></div>
             <div class="stat-value" id="stat-total">{{ stats.total }}</div>
             <div class="stat-label">Total Hari Ini</div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="stat-card success">
-            <div class="stat-icon">✅</div>
+            <div class="stat-icon"><i class="bi bi-check-circle-fill"></i></div>
             <div class="stat-value" id="stat-completed">{{ stats.completed }}</div>
             <div class="stat-label">Selesai</div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="stat-card warning">
-            <div class="stat-icon">⏱️</div>
+            <div class="stat-icon"><i class="bi bi-clock"></i></div>
             <div class="stat-value" id="stat-avg-duration">{{ stats.avg_duration }}s</div>
             <div class="stat-label">Rata-rata Durasi</div>
         </div>
     </div>
     <div class="col-md-3">
         <div class="stat-card info">
-            <div class="stat-icon">💾</div>
+            <div class="stat-icon"><i class="bi bi-hdd"></i></div>
             <div class="stat-value" id="stat-size">{{ stats.total_size_mb }} MB</div>
             <div class="stat-label">Total Ukuran</div>
         </div>
@@ -93,11 +93,14 @@
                             <td class="text-muted">{{ rec.waktu_mulai[:16] if rec.waktu_mulai else '-' }}</td>
                             <td>
                                 {% if rec.status == 'COMPLETED' %}
-                                <span class="badge badge-status-completed">✅ Selesai</span>
+                                <span class="badge badge-status-completed"><i class="bi bi-check-circle-fill me-1"></i>
+                                    Selesai</span>
                                 {% elif rec.status == 'RECORDING' %}
-                                <span class="badge badge-status-recording">🔴 Merekam</span>
+                                <span class="badge badge-status-recording"><i class="bi bi-record-circle me-1"></i>
+                                    Merekam</span>
                                 {% else %}
-                                <span class="badge badge-status-error">⚠️ Error</span>
+                                <span class="badge badge-status-error"><i class="bi bi-exclamation-triangle me-1"></i>
+                                    Error</span>
                                 {% endif %}
                             </td>
                         </tr>
@@ -119,25 +122,25 @@
 <div class="row g-4">
     <div class="col-md-3">
         <a href="{{ url_for('camera') }}" class="card text-center p-4 text-decoration-none">
-            <div class="stat-icon">📷</div>
+            <div class="stat-icon"><i class="bi bi-camera"></i></div>
             <h6 class="mb-0">Ambil Gambar</h6>
         </a>
     </div>
     <div class="col-md-3">
         <a href="{{ url_for('videos') }}" class="card text-center p-4 text-decoration-none">
-            <div class="stat-icon">🎬</div>
+            <div class="stat-icon"><i class="bi bi-play-circle"></i></div>
             <h6 class="mb-0">Galeri Video</h6>
         </a>
     </div>
     <div class="col-md-3">
         <a href="{{ url_for('statistics') }}" class="card text-center p-4 text-decoration-none">
-            <div class="stat-icon">📊</div>
+            <div class="stat-icon"><i class="bi bi-bar-chart"></i></div>
             <h6 class="mb-0">Statistik</h6>
         </a>
     </div>
     <div class="col-md-3">
         <a href="{{ url_for('team') }}" class="card text-center p-4 text-decoration-none">
-            <div class="stat-icon">👥</div>
+            <div class="stat-icon"><i class="bi bi-people"></i></div>
             <h6 class="mb-0">Tim</h6>
         </a>
     </div>

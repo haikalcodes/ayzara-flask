@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>📹 Pengaturan Kamera</h1>
+    <h1><i class="bi bi-camera-video"></i> Pengaturan Kamera</h1>
     <p>Kelola daftar kamera IP untuk recording</p>
 </div>
 
@@ -11,13 +11,10 @@
 <!-- Daftar Kamera -->
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <h3>📋 Daftar Kamera</h3>
+        <h3><i class="bi bi-list-check"></i> Daftar Kamera</h3>
         <div class="header-actions">
-            <button class="btn btn-info" onclick="startDiscovery()">
-                🔍 Discovery Kamera
-            </button>
             <button class="btn btn-primary" onclick="showAddCameraModal()">
-                ➕ Tambah Kamera
+                <i class="bi bi-plus-lg me-1"></i> Tambah Kamera
             </button>
         </div>
     </div>
@@ -52,22 +49,21 @@
             <button class="modal-close" onclick="closeCameraModal()">&times;</button>
         </div>
         <div class="modal-body">
-            <!-- Discovery Section -->
             <div id="discovery-section">
                 <div class="discovery-loading text-center py-4" id="discovery-loading" style="display: none;">
                     <div class="spinner mb-2"></div>
-                    <p>Mencari kamera di jaringan lokal...</p>
+                    <p id="discovery-loading-text">Mencari kamera (IP & Lokal)...</p>
                 </div>
 
                 <div id="discovery-results" style="display: none;">
-                    <p class="mb-3 text-secondary" style="font-size: 14px;">Ditemukan beberapa kamera potensial:</p>
+                    <p class="mb-3 text-secondary" style="font-size: 14px;">Kamera yang terdeteksi:</p>
                     <div class="discovery-list mb-4" id="discovery-list">
-                        <!-- Discovered cameras will be listed here -->
+                        <!-- All cameras will be listed here -->
                     </div>
                     <div class="text-center">
                         <button class="btn btn-glass w-100 py-3" style="border-style: dashed; border-width: 2px;"
                             onclick="switchToManualInput()">
-                            ⌨️ Input Manual (Gunakan URL Sendiri)
+                            <i class="bi bi-keyboard me-1"></i> Input Manual (Gunakan URL Sendiri)
                         </button>
                     </div>
                 </div>
@@ -91,10 +87,18 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="camera-url">URL RTSP</label>
+                    <label>Tipe Kamera</label>
+                    <select id="camera-type" class="form-select" onchange="toggleUrlFormat()">
+                        <option value="ip">IP Camera (RTSP/HTTP)</option>
+                        <option value="local">Kamera Lokal / Webcam</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="url-group">
+                    <label for="camera-url" id="url-label">URL RTSP</label>
                     <input type="text" id="camera-url" class="form-control"
                         placeholder="rtsp://admin:password@192.168.1.10:554/stream" required>
-                    <small class="form-text text-muted">
+                    <small class="form-text text-muted" id="url-hint">
                         Format: rtsp://[username]:[password]@[IP]:[port]/[path]
                     </small>
                 </div>
@@ -480,20 +484,20 @@
         <tr data-id="${cam.id}">
             <td>
                 <span class="status-badge status-checking" id="status-${idx}">
-                    ⏳ Mengecek...
+                    <i class="bi bi-hourglass-split me-1"></i> Mengecek...
                 </span>
             </td>
             <td><strong>${escapeHtml(cam.name)}</strong></td>
             <td><span class="url-text" title="${escapeHtml(cam.url)}">${escapeHtml(cam.url)}</span></td>
             <td>
                 <span class="status-badge ${cam.enabled ? 'status-online' : 'status-offline'}">
-                    ${cam.enabled ? '✅ Aktif' : '❌ Disabled'}
+                    ${cam.enabled ? '<i class="bi bi-check-circle me-1"></i> Aktif' : '<i class="bi bi-x-circle me-1"></i> Disabled'}
                 </span>
             </td>
             <td>
-                <button class="btn btn-sm btn-info" onclick="testCamera(${idx})">🔍 Test</button>
-                <button class="btn btn-sm btn-secondary" onclick="editCamera(${idx})">✏️ Edit</button>
-                <button class="btn btn-sm btn-danger" onclick="deleteCamera(${idx})">🗑️ Hapus</button>
+                <button class="btn btn-sm btn-info" onclick="testCamera(${idx})"><i class="bi bi-search"></i> Test</button>
+                <button class="btn btn-sm btn-secondary" onclick="editCamera(${idx})"><i class="bi bi-pencil-square"></i> Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteCamera(${idx})"><i class="bi bi-trash"></i> Hapus</button>
             </td>
         </tr>
     `).join('');
@@ -526,18 +530,18 @@
                         if (cameraStatus.online) {
                             badge.className = 'status-badge status-online';
                             if (cameraStatus.in_use && cameraStatus.in_use_by) {
-                                badge.innerHTML = `🟢 Online<br><small>Dipakai oleh ${escapeHtml(cameraStatus.in_use_by)}${cameraStatus.purpose ? ' (' + escapeHtml(cameraStatus.purpose) + ')' : ''}</small>`;
+                                badge.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i> Online<br><small>Dipakai oleh ${escapeHtml(cameraStatus.in_use_by)}${cameraStatus.purpose ? ' (' + escapeHtml(cameraStatus.purpose) + ')' : ''}</small>`;
                             } else {
-                                badge.innerHTML = '🟢 Online';
+                                badge.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Online';
                             }
                         } else {
                             badge.className = 'status-badge status-offline';
-                            badge.innerHTML = '🔴 Offline';
+                            badge.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> Offline';
                         }
                     } else {
                         // Status not yet checked by background worker
                         badge.className = 'status-badge status-checking';
-                        badge.innerHTML = '⏳ Menunggu...';
+                        badge.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Menunggu...';
                     }
                 });
             })
@@ -546,7 +550,7 @@
                     const badge = document.getElementById(`status-${idx}`);
                     if (badge) {
                         badge.className = 'status-badge status-offline';
-                        badge.innerHTML = '❓ Tidak Diketahui';
+                        badge.innerHTML = '<i class="bi bi-question-circle-fill me-1"></i> Tidak Diketahui';
                     }
                 });
             });
@@ -577,34 +581,78 @@
 
         document.getElementById('camera-modal').style.display = 'flex';
 
-        fetch('/api/cameras/discover')
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('discovery-loading').style.display = 'none';
+        const results = [];
+        let ipFinished = false;
+        let localFinished = false;
 
-                if (data.success && data.cameras && data.cameras.length > 0) {
-                    renderDiscoveryResults(data.cameras);
+        const checkFinished = () => {
+            if (ipFinished && localFinished) {
+                document.getElementById('discovery-loading').style.display = 'none';
+                if (results.length > 0) {
+                    renderUnifiedDiscoveryResults(results);
                 } else {
                     document.getElementById('discovery-empty').style.display = 'block';
                 }
+            }
+        };
+
+        // 1. IP Discovery
+        fetch('/api/cameras/discover')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.cameras) {
+                    data.cameras.forEach(cam => {
+                        results.push({ ...cam, type: 'ip' });
+                    });
+                }
+                ipFinished = true;
+                checkFinished();
             })
             .catch(error => {
-                console.error('Discovery error:', error);
-                document.getElementById('discovery-loading').style.display = 'none';
-                document.getElementById('discovery-empty').style.display = 'block';
+                console.error('IP Discovery error:', error);
+                ipFinished = true;
+                checkFinished();
+            });
+
+        // 2. Local Discovery
+        fetch('/api/cameras/detect-local')
+            .then(response => response.json())
+            .then(data => {
+                if (data.cameras) {
+                    data.cameras.forEach(cam => {
+                        results.push({
+                            name: cam.name,
+                            url: cam.index.toString(),
+                            ip: `Device Index: ${cam.index}`,
+                            source: 'Hardware',
+                            type: 'local'
+                        });
+                    });
+                }
+                localFinished = true;
+                checkFinished();
+            })
+            .catch(error => {
+                console.error('Local detection error:', error);
+                localFinished = true;
+                checkFinished();
             });
     }
 
-    function renderDiscoveryResults(discovered) {
+    function renderUnifiedDiscoveryResults(discovered) {
         const list = document.getElementById('discovery-list');
         list.innerHTML = discovered.map(cam => `
             <div class="discovery-item">
                 <div class="discovery-info">
                     <span class="discovery-name">${escapeHtml(cam.name)}</span>
                     <span class="discovery-ip">${cam.ip}</span>
-                    <span class="discovery-source"><i class="bi bi-broadcast"></i> ${cam.source}</span>
+                    <span class="discovery-source">
+                        <i class="bi ${cam.type === 'local' ? 'bi-camera' : 'bi-broadcast'}"></i> 
+                        ${cam.type === 'local' ? 'Hardware/USB' : cam.source}
+                    </span>
                 </div>
-                <button class="btn btn-sm btn-primary px-3" onclick="useDiscoveredCamera('${cam.name}', '${cam.url}')">
+                <button class="btn btn-sm ${cam.type === 'local' ? 'btn-success' : 'btn-primary'} px-3" 
+                    onclick="useDiscoveredCamera('${cam.name}', '${cam.url}', '${cam.type}')">
                     <i class="bi bi-plus-lg me-1"></i> Gunakan
                 </button>
             </div>
@@ -613,11 +661,31 @@
         document.getElementById('discovery-results').style.display = 'block';
     }
 
-    function useDiscoveredCamera(name, url) {
+    function useDiscoveredCamera(name, url, type = 'ip') {
         document.getElementById('camera-name').value = name;
         document.getElementById('camera-url').value = url;
+        document.getElementById('camera-type').value = type;
+        toggleUrlFormat();
         switchToManualInput();
     }
+
+    function toggleUrlFormat() {
+        const type = document.getElementById('camera-type').value;
+        const urlLabel = document.getElementById('url-label');
+        const urlHint = document.getElementById('url-hint');
+        const urlInput = document.getElementById('camera-url');
+
+        if (type === 'local') {
+            urlLabel.textContent = 'Device Index';
+            urlInput.placeholder = 'Contoh: 0, 1, 2';
+            urlHint.innerHTML = 'Index kamera di sistem (biasanya 0 untuk webcam utama)';
+        } else {
+            urlLabel.textContent = 'URL RTSP';
+            urlInput.placeholder = 'rtsp://admin:password@192.168.1.10:554/stream';
+            urlHint.innerHTML = 'Format: rtsp://[username]:[password]@[IP]:[port]/[path]';
+        }
+    }
+
 
     function switchToManualInput() {
         document.getElementById('modal-title').textContent = document.getElementById('camera-id').value ? 'Edit Kamera' : 'Tambah Kamera';
@@ -638,6 +706,14 @@
         document.getElementById('camera-name').value = cam.name;
         document.getElementById('camera-url').value = cam.url;
         document.getElementById('camera-enabled').checked = cam.enabled;
+
+        // Detect type based on URL
+        if (cam.url && !isNaN(cam.url)) {
+            document.getElementById('camera-type').value = 'local';
+        } else {
+            document.getElementById('camera-type').value = 'ip';
+        }
+        toggleUrlFormat();
 
         // Hide discovery, show form directly for edit
         document.getElementById('discovery-section').style.display = 'none';
@@ -677,7 +753,8 @@
             })
             .finally(() => {
                 btn.disabled = false;
-                btn.textContent = '🔍 Test Koneksi';
+                btn.textContent = 'Test Koneksi';
+                btn.innerHTML = '<i class="bi bi-search me-1"></i> Test Koneksi';
             });
     }
 
@@ -687,7 +764,7 @@
         const badge = document.getElementById(`status-${idx}`);
 
         badge.className = 'status-badge status-checking';
-        badge.innerHTML = '⏳ Mengetes...';
+        badge.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Mengetes...';
 
         fetch('/api/cameras/test', {
             method: 'POST',
@@ -698,15 +775,15 @@
             .then(data => {
                 if (data.success) {
                     badge.className = 'status-badge status-online';
-                    badge.innerHTML = '🟢 Online';
+                    badge.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Online';
                 } else {
                     badge.className = 'status-badge status-offline';
-                    badge.innerHTML = '🔴 Offline';
+                    badge.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> Offline';
                 }
             })
             .catch(error => {
                 badge.className = 'status-badge status-offline';
-                badge.innerHTML = '❓ Error';
+                badge.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i> Error';
             });
     }
 
