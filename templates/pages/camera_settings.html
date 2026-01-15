@@ -502,12 +502,12 @@
         </tr>
     `).join('');
 
-        // Initial status load
+        // Initial status load once table is rendered
         refreshAllCameraStatuses();
 
-        // Auto-refresh status every 30 seconds
-        if (window.statusRefreshInterval) clearInterval(window.statusRefreshInterval);
-        window.statusRefreshInterval = setInterval(refreshAllCameraStatuses, 30000);
+        // Note: Auto-refresh interval is managed by startStatusRefresh() / DOMContentLoaded
+        // We do NOT start another interval here to avoid double hits.
+
     }
 
 
@@ -515,22 +515,32 @@
     function refreshAllCameraStatuses() {
         if (!cameras || cameras.length === 0) return;
 
-        fetch('/api/cameras/status')
+        // ENABLE REFRESH=TRUE to force server-side active check
+        fetch('/api/cameras/status?refresh=true')
             .then(response => response.json())
             .then(data => {
-                const statusMap = data.status || {};
+                // Backend returns 'cameras' array, not 'status' map
+                const statusList = data.cameras || [];
+                // Create map for easier lookup
+                const statusMap = {};
+                statusList.forEach(s => {
+                    statusMap[s.url] = s;
+                });
 
                 cameras.forEach((cam, idx) => {
                     const badge = document.getElementById(`status-${idx}`);
                     if (!badge) return;
 
-                    const cameraStatus = statusMap[cam.url] || Object.values(statusMap).find(s => s.url === cam.url);
+                    // Don't overwrite if currently testing manual
+                    if (badge.innerHTML.includes('Mengetes')) return;
+
+                    const cameraStatus = statusMap[cam.url];
 
                     if (cameraStatus) {
                         if (cameraStatus.online) {
                             badge.className = 'status-badge status-online';
-                            if (cameraStatus.in_use && cameraStatus.in_use_by) {
-                                badge.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i> Online<br><small>Dipakai oleh ${escapeHtml(cameraStatus.in_use_by)}${cameraStatus.purpose ? ' (' + escapeHtml(cameraStatus.purpose) + ')' : ''}</small>`;
+                            if (cameraStatus.in_use_by) {
+                                badge.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i> Online<br><small>Dipakai oleh ${escapeHtml(cameraStatus.in_use_by || 'Unknown')}</small>`;
                             } else {
                                 badge.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Online';
                             }
@@ -538,22 +548,12 @@
                             badge.className = 'status-badge status-offline';
                             badge.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> Offline';
                         }
-                    } else {
-                        // Status not yet checked by background worker
-                        badge.className = 'status-badge status-checking';
-                        badge.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Menunggu...';
                     }
+                    // REMOVED: else { set "Waiting" } 
+                    // We keep previous state (which might be "Testing..." or last known state)
                 });
             })
-            .catch(() => {
-                cameras.forEach((cam, idx) => {
-                    const badge = document.getElementById(`status-${idx}`);
-                    if (badge) {
-                        badge.className = 'status-badge status-offline';
-                        badge.innerHTML = '<i class="bi bi-question-circle-fill me-1"></i> Tidak Diketahui';
-                    }
-                });
-            });
+            .catch(err => console.error(err));
     }
 
     // Show add camera modal

@@ -7,7 +7,7 @@
 <!-- Filters -->
 <div class="card mb-4">
     <div class="card-body">
-        <form action="{{ url_for('videos') }}" method="get" id="searchForm" class="row g-3 align-items-end">
+        <form action="{{ url_for('main.videos') }}" method="get" id="searchForm" class="row g-3 align-items-end">
             <!-- Input Method Selection -->
             <div class="col-12">
                 <label class="form-label">Metode Pencarian Resi</label>
@@ -140,17 +140,28 @@
             pegawai: "{{ rec.pegawai }}",
             platform: "{{ rec.platform }}",
             time: "{{ rec.waktu_mulai }}",
-            json: "/recordings/{{ video_relative|replace(".mp4", ".json") if video_relative else "" }}"
+            json: "/recordings/{{ video_relative|replace(".mp4", ".json") if video_relative else "" }}",
+            file_exists: {{ "true" if rec.file_exists else "false" }}
         })'>
-        <div class="video-thumbnail">
+        <div class="video-thumbnail position-relative">
             <img src="/uploads/thumbnails/{{ rec.thumbnail_name }}" alt="Thumbnail"
                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-                style="width:100%; height:100%; object-fit:cover;">
+                style="width:100%; height:100%; object-fit:cover; {{ 'filter: grayscale(100%); opacity: 0.5;' if not rec.file_exists else '' }}">
             <div class="thumbnail-fallback"
                 style="display:none; height:100%; align-items:center; justify-content:center; background:var(--bg-darker);">
                 <i class="bi bi-film" style="font-size: 48px; opacity: 0.3;"></i>
             </div>
+
+            {% if not rec.file_exists %}
+            <div class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center align-items-center"
+                style="background: rgba(0,0,0,0.85); z-index: 5;">
+                <i class="bi bi-slash-circle text-danger mb-2" style="font-size: 3rem;"></i>
+                <span class="badge bg-danger px-3 py-2">FILE VIDEO HILANG</span>
+                <small class="text-muted mt-2">Hanya Metadata Database</small>
+            </div>
+            {% else %}
             <i class="bi bi-play-circle-fill play-icon"></i>
+            {% endif %}
             {% if rec.durasi_detik %}
             <span class="video-duration">{{ rec.durasi_detik }}s</span>
             {% endif %}
@@ -255,10 +266,17 @@
             <div class="modal-body p-0">
                 <div class="row g-0">
                     <!-- Video Column -->
-                    <div class="col-lg-8 bg-black d-flex align-items-center justify-content-center">
+                    <!-- Video Column -->
+                    <div class="col-lg-8 bg-black d-flex align-items-center justify-content-center position-relative">
                         <video id="modalVideo" controls class="w-100" style="max-height: 70vh;" autoplay>
                             Your browser does not support the video tag.
                         </video>
+                        <!-- Missing File Overlay -->
+                        <div id="videoMissingOverlay" class="text-center d-none">
+                            <i class="bi bi-slash-circle text-danger mb-3" style="font-size: 4rem;"></i>
+                            <h5 class="text-white">FILE VIDEO TIDAK DITEMUKAN</h5>
+                            <p class="text-muted">File fisik video telah dihapus atau hilang dari penyimpanan.</p>
+                        </div>
                     </div>
 
                     <!-- Metadata Column -->
@@ -289,8 +307,9 @@
                         <hr>
 
                         <h6 class="text-uppercase text-muted mb-3 fw-bold">File Metadata (JSON)</h6>
-                        <pre id="metaJson" class="bg-light p-3 rounded small text-break border"
-                            style="max-height: 200px; overflow: auto; font-size: 11px;">Memuat metadata...</pre>
+                        <pre id="metaJson"
+                            class="bg-dark text-light p-3 rounded small text-break border border-secondary"
+                            style="max-height: 200px; overflow: auto; font-size: 11px; --bs-bg-opacity: .5;">Memuat metadata...</pre>
 
                         <div class="d-grid gap-2 mt-4">
                             <a id="btnDownloadVideo" href="#" class="btn btn-primary" download>
@@ -650,53 +669,7 @@
         detectBarcode();
     }
 
-    function openVideoModal(data) {
-        // Set basic info
-        document.getElementById('modalVideoTitle').innerHTML = `<i class="bi bi-box-seam me-2"></i> ${data.resi}`;
-        document.getElementById('modalVideoSubtitle').textContent = `${data.platform} • ${data.pegawai}`;
-
-        // Update Metadata
-        document.getElementById('metaResi').textContent = data.resi;
-        document.getElementById('metaPegawai').textContent = data.pegawai;
-        document.getElementById('metaPlatform').textContent = data.platform;
-        document.getElementById('metaTime').textContent = data.time;
-
-        // Video Source
-        const video = document.getElementById('modalVideo');
-        video.src = data.url;
-        video.load();
-
-        // Download Link
-        document.getElementById('btnDownloadVideo').href = data.url;
-        document.getElementById('btnDownloadVideo').download = data.url.split('/').pop();
-
-        // Load JSON
-        const jsonPre = document.getElementById('metaJson');
-        jsonPre.textContent = 'Loading metadata...';
-
-        fetch(data.json)
-            .then(res => {
-                if (!res.ok) throw new Error('Metadata JSON not found (Mungkin video lama)');
-                return res.json();
-            })
-            .then(jsonData => {
-                // Format JSON nicely
-                jsonPre.textContent = JSON.stringify(jsonData, null, 2);
-            })
-            .catch(err => {
-                jsonPre.textContent = err.message;
-            });
-
-        // Show Modal
-        const modal = new bootstrap.Modal(document.getElementById('videoModal'));
-        modal.show();
-
-        // Stop on close
-        document.getElementById('videoModal').addEventListener('hidden.bs.modal', () => {
-            video.pause();
-            video.src = '';
-        });
-    }
+    // Video modal logic moved to static/js/modules/video_player.js
 
     // Auto-generate thumbnails on page load if there are missing thumbnails
     document.addEventListener('DOMContentLoaded', function () {
@@ -743,4 +716,5 @@
         }
     }
 </script>
+<script src="{{ url_for('static', filename='js/modules/video_player.js') }}"></script>
 {% endblock %}
