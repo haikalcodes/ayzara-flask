@@ -42,6 +42,12 @@
       "name": "DroidCam (192.168.43.1)",
       "url": "http://192.168.43.1:4747/mjpegfeed",
       "enabled": true
+    },
+    {
+      "id": 2,
+      "name": "Local Camera 1",
+      "url": "1",
+      "enabled": true
     }
   ],
   "active_camera_index": 1,

@@ -60,8 +60,14 @@
                     <button onclick="editPegawai({{ pegawai.id }})" class="btn btn-sm btn-glass flex-grow-1">
                         <i class="bi bi-pencil me-1"></i>Edit
                     </button>
+                    <button
+                        onclick="togglePegawaiStatus({{ pegawai.id }}, '{{ pegawai.nama }}', {{ 'true' if pegawai.is_active else 'false' }})"
+                        class="btn btn-sm btn-glass {{ 'text-success' if pegawai.is_active else 'text-secondary' }}"
+                        title="Ubah Status Aktif/Nonaktif">
+                        <i class="bi {{ 'bi-toggle-on' if pegawai.is_active else 'bi-toggle-off' }}"></i>
+                    </button>
                     <button onclick="deletePegawai({{ pegawai.id }}, '{{ pegawai.nama }}')"
-                        class="btn btn-sm btn-glass text-danger">
+                        class="btn btn-sm btn-glass text-danger" title="Hapus Permanen">
                         <i class="bi bi-trash"></i>
                     </button>
                 </div>
@@ -78,6 +84,38 @@
     </div>
     {% endfor %}
 </div>
+
+<!-- Pagination -->
+{% if pagination.pages > 1 %}
+<nav aria-label="Page navigation" class="mt-4">
+    <ul class="pagination justify-content-center">
+        <!-- Previous -->
+        <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+            <a class="page-link" href="{{ url_for('main.team', page=pagination.prev_num) }}" aria-label="Previous">
+                <span aria-hidden="true">&laquo;</span>
+            </a>
+        </li>
+
+        <!-- Page Numbers -->
+        {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+        {% if page_num %}
+        <li class="page-item {{ 'active' if page_num == pagination.page }}">
+            <a class="page-link" href="{{ url_for('main.team', page=page_num) }}">{{ page_num }}</a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link">...</span></li>
+        {% endif %}
+        {% endfor %}
+
+        <!-- Next -->
+        <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+            <a class="page-link" href="{{ url_for('main.team', page=pagination.next_num) }}" aria-label="Next">
+                <span aria-hidden="true">&raquo;</span>
+            </a>
+        </li>
+    </ul>
+</nav>
+{% endif %}
 
 <!-- Modal -->
 <div class="modal fade" id="pegawaiModal" tabindex="-1">
