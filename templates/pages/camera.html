@@ -204,25 +204,6 @@
     // Load cameras when page loads
     document.addEventListener('DOMContentLoaded', function () {
         loadCameras();
-
-        // Save camera selection interaction
-        const select = document.getElementById('cameraSelect');
-        if (select) {
-            select.addEventListener('change', function () {
-                if (this.value && !this.value.startsWith('__')) {
-                    localStorage.setItem('last_camera_url', this.value);
-
-                    // Enable check button
-                    const btnCheck = document.getElementById('btnCheck');
-                    if (btnCheck) {
-                        btnCheck.disabled = false;
-                        btnCheck.classList.remove('d-none');
-                        // Reset button text just in case
-                        btnCheck.innerHTML = '<i class="bi bi-search me-2"></i>Check Camera';
-                    }
-                }
-            });
-        }
     });
 
     function loadCameras() {
@@ -245,33 +226,15 @@
                     return;
                 }
 
-                // Get saved selection
-                const savedCamera = localStorage.getItem('last_camera_url');
-                let foundSaved = false;
-
                 cameras.forEach((cam, index) => {
                     const option = document.createElement('option');
                     option.value = cam.url;
                     option.text = cam.name || `Camera ${index + 1}`;
-
-                    // Connect to saved camera if exists
-                    if (savedCamera && cam.url === savedCamera) {
+                    if (index === data.active_index) {
                         option.selected = true;
-                        foundSaved = true;
                     }
-
                     select.add(option);
                 });
-
-                // If saved found, update global var but wait for user to click check
-                if (foundSaved) {
-                    selectedCameraUrl = savedCamera;
-                    // Optional: Enable check button immediately
-                    const btnCheck = document.getElementById('btnCheck');
-                    if (btnCheck) {
-                        btnCheck.disabled = false;
-                    }
-                }
 
                 // Add separator
                 const separator = document.createElement('option');
@@ -396,31 +359,21 @@
         const feedback = document.getElementById('feedbackArea');
 
         // Reset state: Show image container
-        // 2. Show LOADING UI in the box
-        img.style.display = 'none';
-        img.classList.add('d-none');
+        img.classList.remove('d-none');
+        img.style.display = 'block';
 
-        placeholder.classList.remove('d-none');
-        placeholder.style.display = 'flex';
-        placeholder.innerHTML = `
-            <div class="text-center">
-                <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <h4 class="text-light">Menghubungkan...</h4>
-                <p class="text-muted">Sedang mencoba koneksi ke kamera...</p>
-            </div>
-        `;
+        placeholder.classList.add('d-none');
+        placeholder.style.display = 'none';
 
-        // 3. Define disconnect UI Helper
+        // Helper to show disconnect UI
         const showDisconnectUI = () => {
-            if (healthCheckInterval) clearInterval(healthCheckInterval);
             const btnCheck = document.getElementById('btnCheck');
 
+            // Update feedback
             feedback.innerHTML = `
-                <div class="alert alert-danger d-flex align-items-center mb-0">
-                    <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
-                    <div><strong>Koneksi Gagal</strong><br>Pastikan kamera aktif dan URL benar.</div>
+                <div class="alert alert-danger">
+                    <strong><i class="bi bi-exclamation-triangle me-2"></i>Koneksi Terputus</strong><br>
+                    Kamera tidak merespon atau koneksi hilang.
                 </div>
             `;
 
@@ -450,13 +403,7 @@
         };
 
         // Setup stream handlers
-        // Setup stream handlers with Retry Logic
-        let retryCount = 0;
-        const maxRetries = 3;
-
         img.onload = function () {
-            retryCount = 0;
-
             feedback.innerHTML = `
                 <div class="alert alert-success d-flex align-items-center mb-0">
                     <i class="bi bi-camera-video-fill me-2 fs-5"></i>
@@ -473,11 +420,6 @@
             document.getElementById('btnCapture').classList.remove('d-none');
             document.getElementById('btnReset').classList.remove('d-none');
 
-            // Force show image (remove all hiding methods)
-            img.classList.remove('d-none');
-            img.style.display = 'block';
-            img.style.visibility = 'visible';
-
             // Show zoom controls
             document.getElementById('zoomContainer').classList.remove('d-none');
             resetZoom();
@@ -485,22 +427,7 @@
 
         img.onerror = function () {
             console.log('>>> [Preview] Image load error triggered');
-
-            if (retryCount < maxRetries) {
-                retryCount++;
-                console.log(`>>> [Preview] Retrying connection (${retryCount}/${maxRetries})...`);
-
-                // Update UI to show retry
-                const spinner = placeholder.querySelector('p.text-muted');
-                if (spinner) spinner.textContent = `Mencoba menghubungkan ulang (${retryCount})...`;
-
-                // Try reload with delay
-                setTimeout(() => {
-                    img.src = `/video_feed?url=${encodeURIComponent(selectedCameraUrl)}&t=${Date.now()}`;
-                }, 1500);
-            } else {
-                showDisconnectUI();
-            }
+            showDisconnectUI();
         };
 
         // Set stream source with cache buster
@@ -605,9 +532,9 @@
                         }
 
                         // Set content (safely)
-                        if (modalImg) modalImg.src = data.image_base64;
+                        if (modalImg) modalImg.src = data.image;
                         if (downloadBtn) {
-                            downloadBtn.href = data.image_base64;
+                            downloadBtn.href = data.saved_path;
                             downloadBtn.setAttribute('download', data.filename || 'capture.jpg');
                         }
 
@@ -712,24 +639,5 @@
             })
             .catch(err => console.error('Zoom error:', err));
     }
-
-    // Cleanup on exit
-    window.addEventListener('beforeunload', function () {
-        if (selectedCameraUrl) {
-            const data = JSON.stringify({ url: selectedCameraUrl });
-            // Try sendBeacon first
-            if (navigator.sendBeacon) {
-                navigator.sendBeacon('/api/camera/release', new Blob([data], { type: 'application/json' }));
-            } else {
-                // Fallback
-                fetch('/api/camera/release', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    keepalive: true,
-                    body: data
-                });
-            }
-        }
-    });
 </script>
 {% endblock %}

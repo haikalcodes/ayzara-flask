@@ -50,7 +50,7 @@
                 </div>
                 <h4 class="text-danger mb-3">SEDANG MEREKAM</h4>
                 <p class="text-muted mb-0">Recording packing sedang berlangsung</p>
-                <a href="{{ url_for('recording.rekam_packing') }}" class="btn btn-danger mt-3">
+                <a href="{{ url_for('rekam_packing') }}" class="btn btn-danger mt-3">
                     <i class="bi bi-eye me-2"></i>Lihat Proses Rekam
                 </a>
                 {% else %}
@@ -59,7 +59,7 @@
                 </div>
                 <h4 class="text-success">SIAP</h4>
                 <p class="text-muted mb-0">Tidak ada recording aktif</p>
-                <a href="{{ url_for('recording.rekam_packing') }}" class="btn btn-primary mt-3">
+                <a href="{{ url_for('rekam_packing') }}" class="btn btn-primary mt-3">
                     <i class="bi bi-plus-circle me-2"></i>Mulai Rekam Paket
                 </a>
                 {% endif %}
@@ -71,7 +71,7 @@
         <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="card-title mb-0"><i class="bi bi-clock-history me-2"></i>Rekaman Terbaru</h5>
-                <a href="{{ url_for('main.videos') }}" class="btn btn-sm btn-glass">Lihat Semua</a>
+                <a href="{{ url_for('videos') }}" class="btn btn-sm btn-glass">Lihat Semua</a>
             </div>
             <div class="card-body p-0">
                 <table class="table table-hover mb-0">
@@ -121,25 +121,25 @@
 <!-- Quick Actions -->
 <div class="row g-4">
     <div class="col-md-3">
-        <a href="{{ url_for('camera.camera') }}" class="card text-center p-4 text-decoration-none">
+        <a href="{{ url_for('camera') }}" class="card text-center p-4 text-decoration-none">
             <div class="stat-icon"><i class="bi bi-camera"></i></div>
             <h6 class="mb-0">Ambil Gambar</h6>
         </a>
     </div>
     <div class="col-md-3">
-        <a href="{{ url_for('main.videos') }}" class="card text-center p-4 text-decoration-none">
+        <a href="{{ url_for('videos') }}" class="card text-center p-4 text-decoration-none">
             <div class="stat-icon"><i class="bi bi-play-circle"></i></div>
             <h6 class="mb-0">Galeri Video</h6>
         </a>
     </div>
     <div class="col-md-3">
-        <a href="{{ url_for('main.statistics') }}" class="card text-center p-4 text-decoration-none">
+        <a href="{{ url_for('statistics') }}" class="card text-center p-4 text-decoration-none">
             <div class="stat-icon"><i class="bi bi-bar-chart"></i></div>
             <h6 class="mb-0">Statistik</h6>
         </a>
     </div>
     <div class="col-md-3">
-        <a href="{{ url_for('main.team') }}" class="card text-center p-4 text-decoration-none">
+        <a href="{{ url_for('team') }}" class="card text-center p-4 text-decoration-none">
             <div class="stat-icon"><i class="bi bi-people"></i></div>
             <h6 class="mb-0">Tim</h6>
         </a>

@@ -609,9 +609,6 @@
                     .then(configData => {
                         select.innerHTML = '<option value="" disabled selected>Pilih kamera...</option>';
 
-                        const savedCamera = localStorage.getItem('last_camera_url');
-                        let foundSaved = false;
-
                         (configData.cameras || []).forEach(cam => {
                             const status = Object.values(statuses).find(s => s.url === cam.url);
                             const isOnline = status ? status.online : false;
@@ -620,12 +617,7 @@
                             const option = document.createElement('option');
                             option.value = cam.url;
                             option.text = `📷 ${cam.name}`; // Always clickable
-
-                            if (savedCamera && cam.url === savedCamera) {
-                                option.selected = true;
-                                foundSaved = true;
-                            }
-
+                            // We enable all cameras so user can retry connection manually
                             select.add(option);
                         });
 
@@ -637,10 +629,9 @@
                         addOption.style.color = '#0d6efd'; // Bootstrap primary color
                         select.add(addOption);
 
-                        // If saved selection found, activate it
-                        if (foundSaved) {
-                            handleCameraChange(savedCamera);
-                        }
+                        // Select first online camera if available
+                        // Auto-select logic REMOVED to force manual selection
+                        // if (!selectedCameraUrl) { ... }
                     });
             });
 
@@ -654,11 +645,6 @@
             // Reset selection to default/empty to prevent "Add Camera" from staying selected if they come back
             document.getElementById('camera-select').value = "";
             return;
-        }
-
-        // SAVE PREFERENCE
-        if (url) {
-            localStorage.setItem('last_camera_url', url);
         }
 
         selectedCameraUrl = url;
@@ -1270,7 +1256,7 @@
             body: JSON.stringify({
                 resi: resi,
                 platform: platform,
-                camera_url: selectedCameraUrl
+                url: selectedCameraUrl
             })
         })
             .then(res => res.json())
@@ -1364,13 +1350,8 @@
                             platform: parts[1] || selectedPlatform || 'Unknown',
                             pegawai: '{{ current_user.username }}',
                             time: new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jakarta' }).replace(' ', ' '),
-                            json: data.video_url ? data.video_url.replace('.mp4', '.json') : '#',
-                            file_exists: data.file_exists
+                            json: data.video_url ? data.video_url.replace('.mp4', '.json') : '#'
                         };
-
-                        // CRITICAL: Reset recording state
-                        isRecording = false;
-                        recordingId = null;
 
                         resetUI();
 
@@ -1412,27 +1393,6 @@
             });
     }
 
-    // Reset UI helper
-    function resetUI() {
-        // Hide recording overlay
-        const recOverlay = document.getElementById('recording-overlay');
-        if (recOverlay) {
-            recOverlay.classList.remove('d-flex');
-            recOverlay.classList.add('d-none');
-        }
-
-        // Hide buttons
-        document.getElementById('btn-stop')?.classList.add('d-none');
-        document.getElementById('btn-cancel')?.classList.add('d-none');
-        document.getElementById('recording-timer')?.classList.add('d-none');
-
-        // Stop timer
-        if (timerInterval) {
-            clearInterval(timerInterval);
-            timerInterval = null;
-        }
-    }
-
     function cancelRecording() {
         console.log(">>> [UI] Cancel button clicked. ID:", recordingId);
         if (!recordingId) return;
@@ -1446,11 +1406,6 @@
         })
             .then(res => res.json())
             .then(data => {
-                // CRITICAL: Reset recording state
-                isRecording = false;
-                recordingId = null;
-                currentResi = null;
-
                 resetUI();
                 updateStatus('❌ Rekaman dibatalkan');
                 // Restore scanner if needed
@@ -1576,7 +1531,59 @@
     }
 
 
+    // Open video modal (same as video gallery)
+    function openVideoModal(data) {
+        console.log('Opening video modal with data:', data);
+
+        // Set basic info
+        document.getElementById('modalVideoTitle').textContent = `📦 ${data.resi}`;
+        document.getElementById('modalVideoSubtitle').textContent = `${data.platform} • ${data.pegawai}`;
+
+        // Update Metadata
+        document.getElementById('metaResi').textContent = data.resi;
+        document.getElementById('metaPegawai').textContent = data.pegawai;
+        document.getElementById('metaPlatform').textContent = data.platform;
+        document.getElementById('metaTime').textContent = data.time;
+
+        // Video Source
+        const video = document.getElementById('modalVideo');
+        video.src = data.url;
+        video.load();
+        // Force play and handle potential autoplay policies
+        video.play().catch(e => console.log("Autoplay blocked/failed", e));
+
+        // Download Link
+        document.getElementById('btnDownloadVideo').href = data.url;
+        document.getElementById('btnDownloadVideo').download = data.url.split('/').pop();
+
+        // Load JSON
+        const jsonPre = document.getElementById('metaJson');
+        jsonPre.textContent = 'Memuat metadata...';
+
+        fetch(data.json)
+            .then(res => {
+                if (!res.ok) throw new Error('Metadata JSON tidak ditemukan (Mungkin video lama)');
+                return res.json();
+            })
+            .then(jsonData => {
+                // Format JSON nicely
+                jsonPre.textContent = JSON.stringify(jsonData, null, 2);
+            })
+            .catch(err => {
+                jsonPre.textContent = err.message;
+            });
+
+        // Show Modal
+        const modal = new bootstrap.Modal(document.getElementById('videoModal'));
+        modal.show();
+
+        // Stop on close
+        document.getElementById('videoModal').addEventListener('hidden.bs.modal', () => {
+            video.pause();
+            video.src = '';
+        });
+    }
+
 
 </script>
-<script src="{{ url_for('static', filename='js/modules/video_player.js') }}"></script>
 {% endblock %}

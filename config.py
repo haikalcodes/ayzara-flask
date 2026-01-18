@@ -11,8 +11,8 @@ from pathlib import Path
 BASE_DIR = Path(__file__).parent.absolute()
 PROJECT_DIR = BASE_DIR.parent  # Parent folder (main project)
 
-# Database - NOW IN dashboard_flask FOLDER
-DATABASE_FILE = BASE_DIR / "packing_records.db"  # Changed from PROJECT_DIR to BASE_DIR
+# Database
+DATABASE_FILE = PROJECT_DIR / "packing_records.db"
 SQLALCHEMY_DATABASE_URI = f"sqlite:///{DATABASE_FILE}"
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 
