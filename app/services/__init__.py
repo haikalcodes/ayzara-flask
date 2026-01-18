@@ -8,6 +8,7 @@ from .stats_service import StatsService
 from .barcode_service import BarcodeService
 from .camera_service import VideoCamera, get_camera_stream, detect_local_cameras, background_camera_status_checker
 from .recording_service import RecordingService
+from .session_service import SessionService
 
 __all__ = [
     'StatsService',
@@ -16,5 +17,6 @@ __all__ = [
     'get_camera_stream',
     'detect_local_cameras',
     'background_camera_status_checker',
-    'RecordingService'
+    'RecordingService',
+    'SessionService'
 ]

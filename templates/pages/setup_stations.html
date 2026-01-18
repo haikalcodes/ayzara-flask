@@ -1,0 +1,561 @@
+{% extends "base.html" %}
+
+{% block title %}Setup Sesi Rekam - AYZARA Dashboard{% endblock %}
+
+{% block content %}
+<style>
+    .camera-preview-card {
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        overflow: hidden;
+        transition: all 0.3s;
+    }
+
+    .camera-preview-card:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .camera-feed-preview {
+        width: 100%;
+        height: 300px;
+        object-fit: cover;
+        background: #000;
+        display: block;
+    }
+
+    .camera-info-overlay {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        right: 10px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 5px;
+        font-size: 0.9rem;
+    }
+
+    .reconnecting {
+        opacity: 0.5;
+        pointer-events: none;
+    }
+</style>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <h1><i class="bi bi-gear-fill"></i> Setup Sesi Rekam Packing</h1>
+        <p class="text-muted">Konfigurasi kamera dan assign pegawai sebelum memulai sesi rekam</p>
+    </div>
+</div>
+
+<!-- Session Status Card -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card" id="session-status-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-1">Status Sesi</h5>
+                        <p class="mb-0" id="session-status-text">Memuat...</p>
+                    </div>
+                    <div>
+                        <button class="btn btn-success" id="btn-create-session" onclick="createSession()">
+                            <i class="bi bi-plus-circle"></i> Buat Sesi Baru
+                        </button>
+                        <button class="btn btn-danger d-none" id="btn-end-session" onclick="endSession()">
+                            <i class="bi bi-x-circle"></i> Akhiri Sesi
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Camera Assignment Section -->
+<div class="row" id="camera-assignment-section" style="display: none;">
+    <div class="col-12">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5><i class="bi bi-plus-circle"></i> Tambah Kamera ke Sesi</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <label class="form-label">Pilih Kamera</label>
+                        <select id="select-camera" class="form-select">
+                            <option value="">-- Pilih Kamera --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Nama Pegawai</label>
+                        <select id="select-employee" class="form-select">
+                            <option value="">-- Pilih Pegawai --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Platform</label>
+                        <select id="select-platform" class="form-select">
+                            {% for platform in platforms.keys() %}
+                            <option value="{{ platform }}">{{ platform }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">&nbsp;</label>
+                        <button class="btn btn-primary w-100" onclick="assignCameraFromForm()">
+                            <i class="bi bi-check-circle"></i> Assign
+                        </button>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i> Pilih kamera dan pegawai, lalu klik Assign
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Assigned Cameras Grid -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-camera-video"></i> Kamera yang Sudah Di-Assign</h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="refreshAllPreviews()">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh Semua
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="row" id="assigned-cameras-grid">
+                    <div class="col-12 text-center text-muted p-5">
+                        Belum ada kamera yang di-assign
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Launch Control Center Button -->
+<div class="row mt-4" id="launch-section" style="display: none;">
+    <div class="col-12">
+        <div class="card bg-primary text-white">
+            <div class="card-body text-center">
+                <h4><i class="bi bi-rocket-takeoff"></i> Sesi Siap!</h4>
+                <p class="mb-3">Kamera sudah di-assign. Klik tombol di bawah untuk membuka Control Center.</p>
+                <a href="/control-center" class="btn btn-light btn-lg">
+                    <i class="bi bi-grid-3x3-gap"></i> Buka Control Center
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let sessionActive = false;
+    let availableCameras = [];
+    let availableEmployees = [];
+    let assignedCameras = new Set();
+    let cameraFeeds = {}; // Track active camera feeds
+
+    document.addEventListener('DOMContentLoaded', function () {
+        loadSessionStatus();
+        loadAvailableCameras();
+        loadAvailableEmployees();
+
+        // Refresh status every 5 seconds (reduced from 3 to reduce load)
+        setInterval(loadSessionStatus, 5000);
+    });
+
+    function loadSessionStatus() {
+        fetch('/api/session/status')
+            .then(res => res.json())
+            .then(data => {
+                const summary = data.summary;
+                sessionActive = summary.active;
+
+                const statusText = document.getElementById('session-status-text');
+                const btnCreate = document.getElementById('btn-create-session');
+                const btnEnd = document.getElementById('btn-end-session');
+                const assignmentSection = document.getElementById('camera-assignment-section');
+                const launchSection = document.getElementById('launch-section');
+
+                if (sessionActive) {
+                    statusText.innerHTML = `
+                        <span class="badge bg-success">Aktif</span> 
+                        <strong>${summary.total_cameras}</strong> kamera terdaftar
+                        (Idle: ${summary.idle}, Recording: ${summary.recording})
+                    `;
+                    btnCreate.classList.add('d-none');
+                    btnEnd.classList.remove('d-none');
+                    assignmentSection.style.display = 'block';
+
+                    // Show launch button if at least 1 camera assigned
+                    if (summary.total_cameras > 0) {
+                        launchSection.style.display = 'block';
+                    } else {
+                        launchSection.style.display = 'none';
+                    }
+
+                    // Update assigned cameras list
+                    updateAssignedCamerasList(data.session);
+                } else {
+                    statusText.innerHTML = '<span class="badge bg-secondary">Tidak Ada Sesi</span>';
+                    btnCreate.classList.remove('d-none');
+                    btnEnd.classList.add('d-none');
+                    assignmentSection.style.display = 'none';
+                    launchSection.style.display = 'none';
+                }
+            })
+            .catch(err => console.error('Error loading session status:', err));
+    }
+
+    function loadAvailableCameras() {
+        fetch('/api/cameras')
+            .then(res => res.json())
+            .then(data => {
+                availableCameras = data.cameras || [];
+                renderCameraDropdown();
+            })
+            .catch(err => console.error('Error loading cameras:', err));
+    }
+
+    function loadAvailableEmployees() {
+        fetch('/api/employees')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    availableEmployees = data.employees || [];
+                    renderEmployeeDropdown();
+                }
+            })
+            .catch(err => console.error('Error loading employees:', err));
+    }
+
+    function renderCameraDropdown() {
+        const select = document.getElementById('select-camera');
+
+        // Preserve current selection
+        const currentValue = select.value;
+
+        select.innerHTML = '<option value="">-- Pilih Kamera --</option>';
+
+        availableCameras.forEach(camera => {
+            // Skip if already assigned
+            if (assignedCameras.has(camera.url)) return;
+
+            const option = document.createElement('option');
+            option.value = camera.url;
+            option.textContent = `${camera.name} (${camera.url})`;
+            select.appendChild(option);
+        });
+
+        // Restore selection if still available
+        if (currentValue && !assignedCameras.has(currentValue)) {
+            select.value = currentValue;
+        }
+    }
+
+    function renderEmployeeDropdown() {
+        const select = document.getElementById('select-employee');
+        select.innerHTML = '<option value="">-- Pilih Pegawai --</option>';
+
+        availableEmployees.forEach(employee => {
+            const option = document.createElement('option');
+            option.value = employee.nama;
+            option.textContent = employee.nama;
+            select.appendChild(option);
+        });
+    }
+
+    function updateAssignedCamerasList(session) {
+        if (!session || !session.cameras) {
+            assignedCameras.clear();
+            // Clean up all camera feeds
+            cleanupAllFeeds();
+            return;
+        }
+
+        // Track which cameras were removed
+        const oldCameras = new Set(assignedCameras);
+        const newAssignedCameras = new Set(Object.keys(session.cameras));
+
+        // Find removed cameras
+        const removedCameras = [...oldCameras].filter(url => !newAssignedCameras.has(url));
+
+        // Clean up removed camera feeds
+        removedCameras.forEach(url => {
+            cleanupCameraFeed(url);
+        });
+
+        // Only re-render dropdown if the set actually changed
+        const setsAreEqual = assignedCameras.size === newAssignedCameras.size &&
+            [...assignedCameras].every(url => newAssignedCameras.has(url));
+
+        assignedCameras = newAssignedCameras;
+
+        if (!setsAreEqual) {
+            renderCameraDropdown();
+        }
+
+        // Render assigned cameras grid
+        const grid = document.getElementById('assigned-cameras-grid');
+        grid.innerHTML = '';
+
+        if (assignedCameras.size === 0) {
+            grid.innerHTML = '<div class="col-12 text-center text-muted p-5">Belum ada kamera yang di-assign</div>';
+            return;
+        }
+
+        Object.entries(session.cameras).forEach(([cameraUrl, camData]) => {
+            const cameraInfo = availableCameras.find(c => c.url === cameraUrl);
+            const cameraName = cameraInfo ? cameraInfo.name : cameraUrl;
+
+            const feedId = `feed-${btoa(cameraUrl).replace(/=/g, '')}`;
+            // Add unique timestamp to prevent caching old/frozen streams
+            const feedUrl = `/video_feed?url=${encodeURIComponent(cameraUrl)}&t=${Date.now()}`;
+
+            const col = document.createElement('div');
+            col.className = 'col-md-6 col-lg-4 mb-3';
+            col.id = `card-${btoa(cameraUrl).replace(/=/g, '')}`;
+            col.innerHTML = `
+                <div class="camera-preview-card">
+                    <div style="position: relative;">
+                        <img src="${feedUrl}" class="camera-feed-preview" id="${feedId}" 
+                             onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22320%22 height=%22300%22%3E%3Crect fill=%22%23000%22 width=%22320%22 height=%22300%22/%3E%3Ctext fill=%22%23fff%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22%3ECamera Offline%3C/text%3E%3C/svg%3E'">
+                        <div class="camera-info-overlay">
+                            <strong>${cameraName}</strong>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-2">
+                            <i class="bi bi-person-circle"></i> <strong>${camData.employee_name}</strong>
+                        </div>
+                        <div class="mb-2">
+                            <span class="badge bg-secondary">${camData.platform}</span>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-primary flex-fill" onclick="reconnectCamera('${cameraUrl}')">
+                                <i class="bi bi-arrow-clockwise"></i> Reconnect
+                            </button>
+                            <button class="btn btn-sm btn-danger flex-fill" onclick="unassignCamera('${cameraUrl}')">
+                                <i class="bi bi-x"></i> Unassign
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            grid.appendChild(col);
+
+            // Track this feed
+            cameraFeeds[cameraUrl] = feedId;
+        });
+    }
+
+    function cleanupCameraFeed(cameraUrl) {
+        const feedId = cameraFeeds[cameraUrl];
+        if (feedId) {
+            const img = document.getElementById(feedId);
+            if (img) {
+                // Stop loading by setting to blank
+                img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+            }
+            delete cameraFeeds[cameraUrl];
+        }
+
+        // Remove card from DOM
+        const cardId = `card-${btoa(cameraUrl).replace(/=/g, '')}`;
+        const card = document.getElementById(cardId);
+        if (card) {
+            card.remove();
+        }
+    }
+
+    function cleanupAllFeeds() {
+        Object.keys(cameraFeeds).forEach(url => {
+            cleanupCameraFeed(url);
+        });
+        cameraFeeds = {};
+    }
+
+    function reconnectCamera(cameraUrl) {
+        const feedId = `feed-${btoa(cameraUrl).replace(/=/g, '')}`;
+        const img = document.getElementById(feedId);
+        if (img) {
+            // Add visual feedback
+            img.classList.add('reconnecting');
+
+            const feedUrl = `/video_feed?url=${encodeURIComponent(cameraUrl)}&t=${Date.now()}`;
+            img.src = feedUrl;
+
+            // Remove reconnecting class after 1 second
+            setTimeout(() => {
+                img.classList.remove('reconnecting');
+            }, 1000);
+
+            // Show toast notification
+            const toast = document.createElement('div');
+            toast.className = 'position-fixed bottom-0 end-0 p-3';
+            toast.style.zIndex = '9999';
+            toast.innerHTML = `
+                <div class="toast show" role="alert">
+                    <div class="toast-header">
+                        <strong class="me-auto">Reconnecting...</strong>
+                        <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+                    </div>
+                    <div class="toast-body">
+                        Reconnecting camera feed...
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        }
+    }
+
+    function refreshAllPreviews() {
+        assignedCameras.forEach(cameraUrl => {
+            reconnectCamera(cameraUrl);
+        });
+    }
+
+    function assignCameraFromForm() {
+        const cameraUrl = document.getElementById('select-camera').value;
+        const employeeName = document.getElementById('select-employee').value;
+        const platform = document.getElementById('select-platform').value;
+
+        if (!cameraUrl) {
+            Swal.fire('Error', 'Pilih kamera terlebih dahulu', 'error');
+            return;
+        }
+
+        if (!employeeName) {
+            Swal.fire('Error', 'Pilih pegawai terlebih dahulu', 'error');
+            return;
+        }
+
+        fetch('/api/session/assign-camera', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                camera_url: cameraUrl,
+                employee_name: employeeName,
+                platform: platform
+            })
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    // Immediately add to assigned set
+                    assignedCameras.add(cameraUrl);
+
+                    // Reset form
+                    document.getElementById('select-camera').value = '';
+                    document.getElementById('select-employee').value = '';
+
+                    // Re-render dropdown to remove assigned camera
+                    renderCameraDropdown();
+
+                    // Then load full status
+                    loadSessionStatus();
+
+                    Swal.fire('Berhasil!', data.message, 'success');
+                } else {
+                    Swal.fire('Gagal', data.message, 'error');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                Swal.fire('Error', 'Gagal assign kamera', 'error');
+            });
+    }
+
+    function createSession() {
+        if (!confirm('Buat sesi rekam baru?')) return;
+
+        fetch('/api/session/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Berhasil!', data.message, 'success');
+                    loadSessionStatus();
+                } else {
+                    Swal.fire('Gagal', data.message, 'error');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                Swal.fire('Error', 'Gagal membuat sesi', 'error');
+            });
+    }
+
+    function endSession() {
+        if (!confirm('Akhiri sesi rekam? Pastikan tidak ada rekaman aktif.')) return;
+
+        fetch('/api/session/end', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Berhasil!', data.message, 'success');
+
+                    // Clean up all feeds before clearing
+                    cleanupAllFeeds();
+
+                    loadSessionStatus();
+                    assignedCameras.clear();
+                    renderCameraDropdown();
+                } else {
+                    Swal.fire('Gagal', data.message, 'error');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                Swal.fire('Error', 'Gagal mengakhiri sesi', 'error');
+            });
+    }
+
+    function unassignCamera(cameraUrl) {
+        if (!confirm('Unassign kamera ini?')) return;
+
+        fetch('/api/session/unassign-camera', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ camera_url: cameraUrl })
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    // Immediately cleanup this camera feed
+                    cleanupCameraFeed(cameraUrl);
+
+                    // Immediately remove from assigned set
+                    assignedCameras.delete(cameraUrl);
+
+                    // Re-render dropdown to show camera again
+                    renderCameraDropdown();
+
+                    // Then load full status
+                    loadSessionStatus();
+
+                    Swal.fire('Berhasil!', data.message, 'success');
+                } else {
+                    Swal.fire('Gagal', data.message, 'error');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                Swal.fire('Error', 'Gagal unassign kamera', 'error');
+            });
+    }
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', function () {
+        cleanupAllFeeds();
+    });
+</script>
+{% endblock %}

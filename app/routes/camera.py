@@ -298,6 +298,48 @@ def api_camera_capture():
     })
 
 
+@camera_bp.route('/api/camera/snapshot', methods=['GET'])
+@login_required
+def api_camera_snapshot():
+    """Get single snapshot from camera as JPEG image"""
+    url = request.args.get('url', '0')
+    
+    camera = get_camera_stream(url)
+    if camera is None:
+        # Return placeholder image
+        from flask import send_file
+        import io
+        import cv2
+        import numpy as np
+        
+        # Create a simple placeholder
+        placeholder = np.zeros((240, 320, 3), dtype=np.uint8)
+        cv2.putText(placeholder, 'Camera Offline', (50, 120), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        
+        ret, buffer = cv2.imencode('.jpg', placeholder)
+        return Response(buffer.tobytes(), mimetype='image/jpeg')
+    
+    # Get frame
+    frame = camera.get_raw_frame()
+    if frame is None:
+        # Return placeholder
+        import numpy as np
+        placeholder = np.zeros((240, 320, 3), dtype=np.uint8)
+        cv2.putText(placeholder, 'No Frame', (80, 120), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        ret, buffer = cv2.imencode('.jpg', placeholder)
+        return Response(buffer.tobytes(), mimetype='image/jpeg')
+    
+    # Encode to JPEG
+    import cv2
+    ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+    if not ret:
+        return "Failed to encode", 500
+    
+    return Response(buffer.tobytes(), mimetype='image/jpeg')
+
+
 @camera_bp.route('/api/camera/zoom', methods=['POST'])
 @login_required
 def api_camera_zoom():

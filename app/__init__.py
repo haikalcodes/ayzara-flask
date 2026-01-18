@@ -100,6 +100,7 @@ def register_blueprints(app):
     from app.routes.recording import recording_bp
     from app.routes.api import api_bp
     from app.routes.pegawai import pegawai_bp
+    from app.routes.control_center import control_center_bp
     
     # Register all blueprints
     app.register_blueprint(auth_bp)
@@ -108,8 +109,10 @@ def register_blueprints(app):
     app.register_blueprint(recording_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(pegawai_bp)
+    app.register_blueprint(control_center_bp)
     
     print("[Flask] All blueprints registered")
+
 
 
 def register_socketio_handlers(socketio):

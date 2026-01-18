@@ -37,14 +37,6 @@ export function initSocket() {
         console.error('[SocketIO] Reconnection error:', error);
     });
 
-    // Debug: Log all emits
-    const originalEmit = socket.emit;
-    socket.emit = function () {
-        if (arguments[0] !== 'request_status') {
-            console.log('>>> [Socket] Emitting:', arguments[0], arguments[1]);
-        }
-        return originalEmit.apply(this, arguments);
-    };
 
     socket.on('disconnect', (reason) => {
         console.log('[SocketIO] Disconnected. Reason:', reason);

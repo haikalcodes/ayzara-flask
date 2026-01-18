@@ -89,7 +89,19 @@
             <a href="{{ url_for('recording.rekam_packing') }}"
                 class="menu-item {% if request.endpoint == 'rekam_packing' %}active{% endif %}">
                 <i class="bi bi-box-seam"></i>
-                <span>Rekam Packing</span>
+                <span>Rekam Packing (Lama)</span>
+            </a>
+
+            <a href="{{ url_for('control_center.setup_stations') }}"
+                class="menu-item {% if request.endpoint == 'control_center.setup_stations' %}active{% endif %}">
+                <i class="bi bi-gear-fill"></i>
+                <span>Setup Sesi Rekam</span>
+            </a>
+
+            <a href="{{ url_for('control_center.control_center') }}"
+                class="menu-item {% if request.endpoint == 'control_center.control_center' %}active{% endif %}">
+                <i class="bi bi-grid-3x3-gap"></i>
+                <span>Control Center</span>
             </a>
 
             <a href="{{ url_for('camera.camera') }}"
