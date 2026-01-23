@@ -217,6 +217,12 @@
         font-size: 20px;
     }
 
+    .modal-header .actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
     .modal-close {
         background: none;
         border: none;
@@ -579,6 +585,30 @@
         document.getElementById('discovery-results').style.display = 'none';
         document.getElementById('discovery-empty').style.display = 'none';
 
+        // Add Rescan Button if not exists
+        const header = document.querySelector('#camera-modal .modal-header');
+        let actions = header.querySelector('.actions');
+        if (!actions) {
+            actions = document.createElement('div');
+            actions.className = 'actions';
+            const closeBtn = header.querySelector('.modal-close');
+            header.insertBefore(actions, closeBtn);
+            actions.appendChild(closeBtn);
+        }
+
+        // Check if rescan button exists
+        let rescanBtn = document.getElementById('btn-rescan-discovery');
+        if (!rescanBtn) {
+            rescanBtn = document.createElement('button');
+            rescanBtn.id = 'btn-rescan-discovery';
+            rescanBtn.className = 'btn btn-sm btn-outline-primary me-2';
+            rescanBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Rescan';
+            rescanBtn.onclick = startDiscovery;
+            actions.insertBefore(rescanBtn, actions.firstChild);
+        }
+        // Only show rescan button in discovery mode
+        rescanBtn.style.display = 'inline-block';
+
         document.getElementById('camera-modal').style.display = 'flex';
 
         const results = [];
@@ -662,11 +692,13 @@
     }
 
     function useDiscoveredCamera(name, url, type = 'ip') {
+        console.log(`[Discovery] User clicked 'Gunakan'. Name: ${name}, URL: ${url}, Type: ${type}`);
         document.getElementById('camera-name').value = name;
         document.getElementById('camera-url').value = url;
         document.getElementById('camera-type').value = type;
         toggleUrlFormat();
         switchToManualInput();
+        console.log("[Discovery] Form populated and switched to Manual Input mode.");
     }
 
     function toggleUrlFormat() {
@@ -691,6 +723,10 @@
         document.getElementById('modal-title').textContent = document.getElementById('camera-id').value ? 'Edit Kamera' : 'Tambah Kamera';
         document.getElementById('discovery-section').style.display = 'none';
         document.getElementById('camera-form').style.display = 'block';
+
+        // Hide Rescan button
+        const rescanBtn = document.getElementById('btn-rescan-discovery');
+        if (rescanBtn) rescanBtn.style.display = 'none';
     }
 
     // Close modal

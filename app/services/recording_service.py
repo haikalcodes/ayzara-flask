@@ -172,22 +172,25 @@ class RecordingService:
             if os.path.exists(temp_path) and frames_written > 0:
                 print(f"[Recording] Converting to H.264 MP4: {output_path}")
                 
-                # FFmpeg command with optimized compression
-                # CRF 23 = Good quality, reasonable size (18=high quality/large, 28=lower quality/small)
-                # preset medium = Balanced speed/compression (ultrafast=fast/large, slow=slow/small)
-                # pix_fmt yuv420p = CRITICAL for browser compatibility
-                # movflags +faststart = Enable streaming playback
+                # FFmpeg command with optimized compression and compatibility
+                # CRF 23 = Good quality/size balance
+                # preset medium = Balanced speed
+                # pix_fmt yuv420p = REQUIRED for browser playback
+                # scale filter = REQUIRED for H.264 (dimensions must be divisible by 2)
                 cmd = [
                     'ffmpeg', '-y',
                     '-i', temp_path,
+                    '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', # Force even dimensions
                     '-c:v', 'libx264',
-                    '-preset', 'medium',      # Balanced compression
-                    '-crf', '23',             # Good quality (lower = better quality/larger size)
-                    '-pix_fmt', 'yuv420p',    # CRITICAL for Chrome/Safari
-                    '-movflags', '+faststart', # Streaming support
+                    '-preset', 'medium',
+                    '-crf', '23',
+                    '-pix_fmt', 'yuv420p',
+                    '-movflags', '+faststart',
                     output_path
                 ]
                 
+                print(f"[Recording] Running FFmpeg: {' '.join(cmd)}")
+
                 # Run FFmpeg
                 process = subprocess.run(
                     cmd, 
@@ -215,7 +218,8 @@ class RecordingService:
                 else:
                     error_msg = process.stderr.decode('utf-8', errors='ignore')
                     print(f"[Recording] ❌ FFmpeg conversion FAILED!")
-                    print(f"[Recording] Error: {error_msg[:500]}")  # First 500 chars
+                    print(f"[Recording] Command: {' '.join(cmd)}")
+                    print(f"[Recording] Error Output:\n{error_msg}")
             else:
                 print(f"[Recording] ❌ No frames recorded or temp file missing")
             

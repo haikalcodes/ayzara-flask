@@ -12,8 +12,7 @@
             <div class="col-12">
                 <label class="form-label">Metode Pencarian Resi</label>
                 <div class="btn-group w-100" role="group">
-                    <input type="radio" class="btn-check" name="search-method" id="method-manual" value="manual"
-                        checked>
+                    <input type="radio" class="btn-check" name="search-method" id="method-manual" value="manual">
                     <label class="btn btn-outline-primary" for="method-manual">
                         <i class="bi bi-keyboard me-2"></i>Ketik Manual
                     </label>
@@ -23,7 +22,8 @@
                         <i class="bi bi-upc-scan me-2"></i>Scanner Barcode
                     </label>
 
-                    <input type="radio" class="btn-check" name="search-method" id="method-camera" value="camera">
+                    <input type="radio" class="btn-check" name="search-method" id="method-camera" value="camera"
+                        checked>
                     <label class="btn btn-outline-primary" for="method-camera">
                         <i class="bi bi-camera me-2"></i>Deteksi Kamera
                     </label>
@@ -34,12 +34,20 @@
             <div class="col-12 d-none" id="camera-search-section">
                 <div class="card bg-dark">
                     <div class="card-body p-0">
-                        <div class="position-relative" style="max-height: 200px; background: #000;">
+                        <div class="position-relative" style="max-height: 250px; background: #000; min-height: 200px;">
+                            <!-- Backend Camera Feed -->
                             <img id="camera-search-feed" src="" class="img-fluid w-100"
-                                style="display: none; max-height: 200px; object-fit: contain;">
+                                style="display: none; max-height: 250px; object-fit: contain;">
+
+                            <!-- Local Camera Feed -->
+                            <div id="local-search-reader-wrapper"
+                                class="d-none w-100 h-100 bg-black d-flex justify-content-center align-items-center">
+                                <div id="html5-search-reader" style="width: 100%; max-width: 350px;"></div>
+                            </div>
+
                             <div id="camera-search-placeholder"
                                 class="d-flex flex-column justify-content-center align-items-center h-100 text-muted p-4"
-                                style="min-height: 200px;">
+                                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
                                 <i class="fs-1 mb-2 bi bi-camera text-muted"></i>
                                 <h6>Pilih Kamera</h6>
                                 <p class="small mb-0">Pilih kamera di bawah untuk mulai scan</p>
@@ -121,11 +129,99 @@
                         title="Regenerate Thumbnails" id="btnGenerateThumbs">
                         <i class="bi bi-images"></i>
                     </button>
+                    {% if current_user.role == 'admin' %}
+                    <button type="button" class="btn btn-glass text-danger" id="btnManage" onclick="toggleManageMode()"
+                        title="Delete Mode">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                    {% endif %}
                 </div>
             </div>
         </form>
     </div>
 </div>
+
+<!-- Bulk Action Toolbar (Admin Only) -->
+<div id="bulk-action-bar" class="card mb-4 border-danger d-none fixed-toolbar">
+    <div class="card-body d-flex justify-content-between align-items-center py-2">
+        <div>
+            <span class="fw-bold text-danger me-2"><i class="bi bi-check-square-fill"></i> <span
+                    id="selected-count">0</span> Video Terpilih</span>
+            <button class="btn btn-sm btn-outline-secondary ms-2" onclick="selectAll()">Pilih Semua</button>
+            <button class="btn btn-sm btn-outline-secondary ms-1" onclick="deselectAll()">Reset</button>
+        </div>
+        <div>
+            <button class="btn btn-danger" onclick="deleteSelectedVideos()">
+                <i class="bi bi-trash-fill me-2"></i>Hapus Terpilih
+            </button>
+            <button class="btn btn-secondary ms-2" onclick="toggleManageMode()">
+                Batal
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .fixed-toolbar {
+        position: fixed;
+        top: 64px;
+        left: 284px;
+        /* 260px sidebar + 24px padding */
+        right: 24px;
+        z-index: 900;
+        background: #0a0a12;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        transition: left 0.3s ease;
+    }
+
+    @media (max-width: 992px) {
+        .fixed-toolbar {
+            left: 24px;
+        }
+    }
+
+    /* Manage Mode Styles */
+    .manage-mode .video-card {
+        cursor: pointer;
+        position: relative;
+        /* Ensure absolute children are positioned relative to card */
+    }
+
+    .manage-mode .video-card:hover {
+        transform: scale(1.02);
+        box-shadow: 0 0 0 2px #dc3545;
+    }
+
+    .video-card.selected {
+        box-shadow: 0 0 0 3px #dc3545 !important;
+        background: rgba(220, 53, 69, 0.05);
+    }
+
+    .video-checkbox-overlay {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 100 !important;
+        display: none;
+    }
+
+    .manage-mode .video-checkbox-overlay {
+        display: block !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
+
+    .video-checkbox {
+        width: 24px;
+        height: 24px;
+        cursor: pointer;
+        border: 2px solid white;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+        accent-color: #dc3545;
+        /* Ensure standard appearance override if needed */
+        margin: 0;
+    }
+</style>
 
 <!-- Video Grid -->
 <div class="video-grid mb-4">
@@ -134,15 +230,22 @@
     {% set video_relative = video_path.replace('recordings/', '') if video_path.startswith('recordings') else video_path
     %}
     {% set video_filename = video_path.split('/')[-1] if video_path else '' %}
-    <div class="video-card" onclick='openVideoModal({
-            url: "/recordings/{{ video_relative }}",
-            resi: "{{ rec.resi }}",
-            pegawai: "{{ rec.pegawai }}",
-            platform: "{{ rec.platform }}",
-            time: "{{ rec.waktu_mulai }}",
-            json: "/recordings/{{ video_relative|replace(".mp4", ".json") if video_relative else "" }}",
-            file_exists: {{ "true" if rec.file_exists else "false" }}
-        })'>
+
+    <div class="video-card" id="card_{{ rec.id }}" onclick="handleCardClick(event, '{{ rec.id }}', {
+            url: '/recordings/{{ video_relative }}',
+            resi: '{{ rec.resi }}',
+            pegawai: '{{ rec.pegawai }}',
+            platform: '{{ rec.platform }}',
+            time: '{{ rec.waktu_mulai }}',
+            json: '/recordings/{{ video_relative|replace('.mp4', '.json') if video_relative else '' }}',
+            file_exists: {{ 'true' if rec.file_exists else 'false' }}
+        })">
+
+        <!-- Selection Checkbox Overlay -->
+        <div class="video-checkbox-overlay">
+            <input type="checkbox" class="video-checkbox" value="{{ rec.id }}" id="chk_{{ rec.id }}"
+                onclick="event.stopPropagation(); toggleSelect('{{ rec.id }}')">
+        </div>
         <div class="video-thumbnail position-relative">
             <img src="/uploads/thumbnails/{{ rec.thumbnail_name }}" alt="Thumbnail"
                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
@@ -183,22 +286,31 @@
                 {% endif %}
             </div>
             <!-- Share buttons -->
-            <div class="mt-2">
-                <button class="btn btn-sm btn-glass"
-                    onclick="event.stopPropagation(); shareToSocial('whatsapp', '/recordings/{{ video_filename }}', '{{ rec.resi }}')"
-                    title="Share WhatsApp">
-                    <i class="bi bi-whatsapp"></i>
+            <div class="mt-2 d-flex gap-2 align-items-center">
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-glass"
+                        onclick="event.stopPropagation(); shareToSocial('whatsapp', '/recordings/{{ video_filename }}', '{{ rec.resi }}')"
+                        title="Share WhatsApp">
+                        <i class="bi bi-whatsapp"></i>
+                    </button>
+                    <button class="btn btn-sm btn-glass"
+                        onclick="event.stopPropagation(); shareToSocial('telegram', '/recordings/{{ video_filename }}', '{{ rec.resi }}')"
+                        title="Share Telegram">
+                        <i class="bi bi-telegram"></i>
+                    </button>
+                    <button class="btn btn-sm btn-glass"
+                        onclick="event.stopPropagation(); shareToSocial('copy', '/recordings/{{ video_filename }}', '{{ rec.resi }}')"
+                        title="Copy Link">
+                        <i class="bi bi-link-45deg"></i>
+                    </button>
+                </div>
+
+                {% if current_user.role == 'admin' %}
+                <button class="btn btn-sm btn-danger px-2"
+                    onclick="event.stopPropagation(); deleteSingleVideo('{{ rec.id }}')" title="Hapus Video">
+                    <i class="bi bi-trash"></i>
                 </button>
-                <button class="btn btn-sm btn-glass"
-                    onclick="event.stopPropagation(); shareToSocial('telegram', '/recordings/{{ video_filename }}', '{{ rec.resi }}')"
-                    title="Share Telegram">
-                    <i class="bi bi-telegram"></i>
-                </button>
-                <button class="btn btn-sm btn-glass"
-                    onclick="event.stopPropagation(); shareToSocial('copy', '/recordings/{{ video_filename }}', '{{ rec.resi }}')"
-                    title="Copy Link">
-                    <i class="bi bi-link-45deg"></i>
-                </button>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -332,11 +444,13 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <script>
     // Barcode Search Variables
     let searchCameraUrl = '';
     let barcodeSearchInterval = null;
     let isSearching = false;
+    let html5SearchQrCode = null; // Local scanner instance
 
     // Sound effects (same as recording page)
     const sounds = {
@@ -390,8 +504,16 @@
             });
         });
 
-        // Load cameras on page load
-        loadCamerasForSearch();
+        // TRIGGER INITIAL STATE
+        // Find the checked radio and manually trigger the logic
+        const checkedRadio = document.querySelector('input[name="search-method"]:checked');
+        if (checkedRadio && checkedRadio.value === 'camera') {
+            cameraSection.classList.remove('d-none');
+            loadCamerasForSearch();
+        } else if (checkedRadio && checkedRadio.value === 'scanner') {
+            searchInput.focus();
+            setupScannerMode();
+        }
 
         // Connect and cancel camera search buttons (now handled via onclick attributes)
         // document.getElementById('btn-connect-camera-search').addEventListener('click', connectCameraForSearch);
@@ -439,22 +561,62 @@
     function loadCamerasForSearch() {
         const select = document.getElementById('camera-search-select');
 
+        // NEW: Handle redirection immediately on selection
+        select.onchange = function () {
+            if (this.value === '__add_new__') {
+                window.location.href = '/camera-settings';
+            }
+        };
+
         fetch('/api/cameras')
             .then(res => res.json())
             .then(data => {
                 select.innerHTML = '<option value="">Pilih kamera...</option>';
+
+                // Add Local Client Camera option
+                const localOption = document.createElement('option');
+                localOption.value = 'local_client_device';
+                localOption.text = '📱 Local Camera (Client Device)';
+                localOption.style.fontWeight = 'bold';
+                select.add(localOption);
+
                 (data.cameras || []).forEach(cam => {
                     const option = document.createElement('option');
                     option.value = cam.url;
                     option.text = `📷 ${cam.name}`;
                     select.add(option);
                 });
+
+                // Add "Add New Camera" option
+                const addOption = document.createElement('option');
+                addOption.value = '__add_new__';
+                addOption.text = '➕ Tambah Kamera Baru...';
+                addOption.style.fontWeight = 'bold';
+                addOption.style.color = '#0d6efd';
+                select.add(addOption);
             })
             .catch(err => console.error('Failed to load cameras:', err));
     }
 
     // NEW: Connect camera for search (step 1)
     // NEW: Connect camera for search (step 1)
+    // NEW: Cleanup on page unload
+    window.addEventListener('beforeunload', function () {
+        if (searchCameraUrl && searchCameraUrl !== 'local_client_device') {
+            const data = JSON.stringify({ url: searchCameraUrl });
+            if (navigator.sendBeacon) {
+                navigator.sendBeacon('/api/camera/release', new Blob([data], { type: 'application/json' }));
+            } else {
+                fetch('/api/camera/release', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    keepalive: true,
+                    body: data
+                });
+            }
+        }
+    });
+
     // NEW: Connect camera for search with Retry Mechanism
     let connectionRetries = 0;
     const MAX_SH_RETRIES = 3;
@@ -462,14 +624,28 @@
 
     function connectCameraForSearch() {
         const select = document.getElementById('camera-search-select');
-        searchCameraUrl = select.value;
+        const newUrl = select.value;
 
-        if (!searchCameraUrl) {
+        if (!newUrl) {
             alert('Pilih kamera terlebih dahulu!');
             return;
         }
 
+        // 1. Release previous camera if different
+        if (searchCameraUrl && searchCameraUrl !== newUrl && searchCameraUrl !== 'local_client_device') {
+            console.log('>>> [Video Gallery] Switching... Release old:', searchCameraUrl);
+            fetch('/api/camera/release', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                keepalive: true,
+                body: JSON.stringify({ url: searchCameraUrl })
+            }).catch(e => console.log('Old release failed', e));
+        }
+
+        searchCameraUrl = newUrl;
+
         const img = document.getElementById('camera-search-feed');
+        const localWrapper = document.getElementById('local-search-reader-wrapper');
         const placeholder = document.getElementById('camera-search-placeholder');
         const status = document.getElementById('camera-search-status');
         const selectorRow = document.getElementById('camera-selector-row');
@@ -479,11 +655,48 @@
         if (selectorRow) selectorRow.classList.add('d-none');
         if (scanningControls) scanningControls.classList.remove('d-none');
 
-        // Show camera feed container
-        img.style.display = 'block';
-        placeholder.style.display = 'none';
+        // Hide placeholder Forcefully
+        placeholder.classList.add('d-none');
+        placeholder.classList.remove('d-flex');
+        placeholder.style.setProperty('display', 'none', 'important');
 
-        status.innerHTML = '<span class="text-info">🔵 Mempersiapkan kamera...</span>';
+        // --- LOCAL CAMERA LOGIC ---
+        if (searchCameraUrl === 'local_client_device') {
+            img.style.display = 'none';
+            localWrapper.classList.remove('d-none');
+            status.innerHTML = '<span class="text-info">🔵 Membuka kamera lokal...</span>';
+
+            // CHECK SECURE CONTEXT
+            if (window.isSecureContext === false) {
+                alert("⚠️ Peringatan: Browser Anda memblokir akses kamera karena koneksi tidak aman (HTTP). Gunakan HTTPS.");
+            }
+
+            html5SearchQrCode = new Html5Qrcode("html5-search-reader");
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+            html5SearchQrCode.start({ facingMode: "environment" }, config, handleLocalScanSuccess)
+                .then(() => {
+                    status.innerHTML = '<span class="text-success">🟢 Kamera lokal aktif! Scan resi...</span>';
+                    isSearching = true;
+                })
+                .catch(err => {
+                    console.log("Local camera error", err);
+                    let msg = "Gagal membuka kamera lokal.";
+                    if (err?.toString().includes("is not supported")) {
+                        msg = "Browser tidak mendukung streaming kamera (pastikan HTTPS).";
+                    } else if (err?.name === "NotAllowedError") {
+                        msg = "Izin kamera ditolak.";
+                    }
+                    status.innerHTML = `<span class="text-danger">⚠️ ${msg}</span>`;
+                });
+            return;
+        }
+
+        // --- BACKEND CAMERA LOGIC ---
+        localWrapper.classList.add('d-none');
+        img.style.display = 'block';
+
+        status.innerHTML = '<span class="text-info">🔵 Mempersiapkan kamera server...</span>';
 
         connectionRetries = 0;
 
@@ -502,33 +715,71 @@
             // Set source with timestamp to prevent caching
             img.src = `/video_feed?url=${encodeURIComponent(searchCameraUrl)}&t=${Date.now()}`;
 
+            // SAFETY TIMEOUT in case browser doesn't fire onerror
+            const safetyTimeout = setTimeout(() => {
+                if (status.innerHTML.includes('Menghubungkan')) {
+                    console.error('>>> [Video Gallery] Connection timeout triggered');
+                    img.onerror(); // Manually trigger error handler
+                }
+            }, 10000);
+
             img.onload = function () {
+                if (!searchCameraUrl) return; // Ignore if cancelled
+                clearTimeout(safetyTimeout); // Clear safety
                 status.innerHTML = '<span class="text-success">🟢 Kamera terhubung! Mencari barcode...</span>';
                 isSearching = true;
-                connectionRetries = 0; // Reset
                 startBarcodeSearchLoop();
             };
 
             img.onerror = function () {
-                if (connectionRetries < MAX_SH_RETRIES) {
-                    connectionRetries++;
-                    status.innerHTML = `<span class="text-warning">⚠️ Gagal terhubung. Mencoba ulang (${connectionRetries}/${MAX_SH_RETRIES})...</span>`;
-                    console.log(`>>> [Video Gallery] Connection failed, retrying ${connectionRetries}/${MAX_SH_RETRIES}`);
+                if (!searchCameraUrl) return; // Ignore if cancelled
+                clearTimeout(safetyTimeout); // Clear safety
+                // IMMEDIATE FAILURE - NO RETRY
+                console.error('>>> [Video Gallery] Connection failed immediately');
 
-                    retryTimeout = setTimeout(() => {
-                        attemptCameraConnection();
-                    }, 2000); // Wait 2s before retry
-                } else {
-                    status.innerHTML = '<span class="text-danger">⚠️ Gagal terhubung. Silakan klik "Batal" dan coba lagi.</span>';
-                    console.error('>>> [Video Gallery] Connection failed after max retries');
-                }
+                status.innerHTML = `
+                    <div class="d-flex flex-column gap-2 align-items-center">
+                        <span class="text-danger">⚠️ Gagal terhubung ke kamera (Timeout/Error).</span>
+                        <button class="btn btn-sm btn-outline-primary" style="max-width: 200px;" onclick="connectCameraForSearch()">
+                            <i class="bi bi-arrow-clockwise me-1"></i> Coba Lagi (Reload)
+                        </button>
+                    </div>
+                `;
             };
         }
+    }
+
+    function handleLocalScanSuccess(decodedText, decodedResult) {
+        if (!isSearching || !decodedText) return;
+
+        console.log('>>> [Search - Local] Barcode detected:', decodedText);
+        playSound('beep');
+
+        // Update search input
+        const searchInput = document.getElementById('searchInput');
+        searchInput.value = decodedText;
+
+        // Visual feedback
+        const status = document.getElementById('camera-search-status');
+        status.innerHTML = `<span class="text-success">✅ Barcode detected: <strong>${decodedText}</strong></span>`;
+
+        stopCameraSearch();
+
+        setTimeout(() => {
+            document.getElementById('searchForm').submit();
+        }, 500);
     }
 
     // NEW: Cancel camera search and reset to initial state
     function cancelCameraSearch() {
         console.log('>>> [Video Gallery] Canceling camera search');
+
+        // Stop local
+        if (html5SearchQrCode) {
+            html5SearchQrCode.stop().catch(e => console.log('Local stop err', e));
+            html5SearchQrCode = null;
+        }
+        document.getElementById('local-search-reader-wrapper').classList.add('d-none');
 
         // Stop barcode detection
         if (barcodeSearchInterval) {
@@ -550,12 +801,9 @@
 
         const placeholder = document.getElementById('camera-search-placeholder');
         if (placeholder) {
-            placeholder.style.display = 'flex';
-            placeholder.innerHTML = `
-                <i class="fs-1 mb-2">📷</i>
-                <h6>Pilih Kamera</h6>
-                <p class="small mb-0">Pilih kamera di bawah untuk mulai scan</p>
-            `;
+            placeholder.classList.remove('d-none');
+            placeholder.classList.add('d-flex');
+            placeholder.style.removeProperty('display'); // Reset inline style
         }
 
         // Show camera selector again, hide cancel button
@@ -566,12 +814,12 @@
 
         // Reset status
         const status = document.getElementById('camera-search-status');
-        if (status) status.innerHTML = 'Pilih kamera dan klik Connect Camera';
+        if (status) status.innerHTML = 'Pilih kamera dan klik Hubungkan Kamera';
 
         isSearching = false;
 
-        // Release camera
-        if (searchCameraUrl) {
+        // Release camera (ONLY if backend)
+        if (searchCameraUrl && searchCameraUrl !== 'local_client_device') {
             fetch('/api/camera/release', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -584,6 +832,15 @@
 
     // Stop camera search (called after successful scan)
     function stopCameraSearch() {
+        // Stop local
+        if (html5SearchQrCode) {
+            html5SearchQrCode.stop().then(() => {
+                html5SearchQrCode = null;
+            }).catch(e => console.log('Local stop err', e));
+        }
+        const localWrap = document.getElementById('local-search-reader-wrapper');
+        if (localWrap) localWrap.classList.add('d-none');
+
         if (barcodeSearchInterval) {
             clearTimeout(barcodeSearchInterval);
             barcodeSearchInterval = null;
@@ -597,7 +854,9 @@
 
         const placeholder = document.getElementById('camera-search-placeholder');
         if (placeholder) {
-            placeholder.style.display = 'flex';
+            placeholder.classList.remove('d-none');
+            placeholder.classList.add('d-flex');
+            placeholder.style.removeProperty('display');
         }
 
         // Show camera selector again, hide cancel button
@@ -608,8 +867,8 @@
 
         isSearching = false;
 
-        // Release camera
-        if (searchCameraUrl) {
+        // Release camera (backend only)
+        if (searchCameraUrl && searchCameraUrl !== 'local_client_device') {
             fetch('/api/camera/release', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -714,6 +973,153 @@
             console.error('[Thumbnail] Error:', error);
             if (alert) alert.style.display = 'none';
         }
+    }
+
+    // --- MANAGE MODE (ADMIN) ---
+    let isManageMode = false;
+    let selectedIds = new Set();
+
+    function toggleManageMode() {
+        isManageMode = !isManageMode;
+
+        const btn = document.getElementById('btnManage');
+        const toolbar = document.getElementById('bulk-action-bar');
+
+        if (isManageMode) {
+            document.body.classList.add('manage-mode');
+            if (btn) {
+                btn.classList.add('active', 'bg-danger', 'text-white');
+                btn.classList.remove('text-danger'); // Prevent red-on-red conflict
+            }
+            if (toolbar) toolbar.classList.remove('d-none');
+        } else {
+            // CANCEL MODE: Clear selection
+            deselectAll(); // Fix: Clear selection on cancel
+
+            document.body.classList.remove('manage-mode');
+            if (btn) {
+                btn.classList.remove('active', 'bg-danger', 'text-white');
+                btn.classList.add('text-danger'); // Restore red text
+            }
+            if (toolbar) toolbar.classList.add('d-none');
+        }
+    }
+
+    function handleCardClick(event, id, videoData) {
+        if (isManageMode) {
+            toggleSelect(id);
+        } else {
+            openVideoModal(videoData);
+        }
+    }
+
+    function toggleSelect(id) {
+        const checkbox = document.getElementById('chk_' + id);
+        const card = document.getElementById('card_' + id);
+
+        if (selectedIds.has(id)) {
+            selectedIds.delete(id);
+            if (checkbox) checkbox.checked = false;
+            if (card) card.classList.remove('selected');
+        } else {
+            selectedIds.add(id);
+            if (checkbox) checkbox.checked = true;
+            if (card) card.classList.add('selected');
+        }
+        updateSelectionUI();
+    }
+
+    function selectAll() {
+        const checkboxes = document.querySelectorAll('.video-checkbox');
+        checkboxes.forEach(chk => {
+            const id = chk.value;
+            selectedIds.add(id);
+            chk.checked = true;
+            const card = document.getElementById('card_' + id);
+            if (card) card.classList.add('selected');
+        });
+        updateSelectionUI();
+    }
+
+    function deselectAll() {
+        selectedIds.clear();
+        document.querySelectorAll('.video-checkbox').forEach(chk => chk.checked = false);
+        document.querySelectorAll('.video-card').forEach(card => card.classList.remove('selected'));
+        updateSelectionUI();
+    }
+
+    function updateSelectionUI() {
+        const countSpan = document.getElementById('selected-count');
+        if (countSpan) countSpan.innerText = selectedIds.size;
+    }
+
+    function deleteSelectedVideos() {
+        if (selectedIds.size === 0) {
+            Swal.fire('Info', 'Pilih video terlebih dahulu', 'info');
+            return;
+        }
+
+        Swal.fire({
+            title: 'Hapus ' + selectedIds.size + ' Video?',
+            text: "Video dan data terkait akan dihapus permanen!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Ya, Hapus!',
+            cancelButtonText: 'Batal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                performDelete(Array.from(selectedIds));
+            }
+        });
+    }
+
+    function deleteSingleVideo(id) {
+        Swal.fire({
+            title: 'Hapus Video Ini?',
+            text: "Video akan dihapus permanen!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Ya, Hapus!',
+            cancelButtonText: 'Batal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                performDelete([id]);
+            }
+        });
+    }
+
+    function performDelete(ids) {
+        // Show loading
+        Swal.fire({
+            title: 'Menghapus...',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        fetch('/api/videos/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: ids })
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire('Terhapus!', (data.deleted || 0) + ' video telah dihapus.', 'success')
+                        .then(() => location.reload());
+                } else {
+                    Swal.fire('Gagal', data.message || 'Gagal menghapus video.', 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Delete error:', err);
+                Swal.fire('Error', 'Terjadi kesalahan sistem', 'error');
+            });
     }
 </script>
 <script src="{{ url_for('static', filename='js/modules/video_player.js') }}"></script>
