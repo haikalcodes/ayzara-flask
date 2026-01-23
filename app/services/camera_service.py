@@ -387,14 +387,86 @@ def perform_camera_discovery(timeout=3.0):
             except:
                 pass
 
+    # Helper to check if a specific RTSP path exists
+    def check_rtsp_path(ip, port, path):
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.5) # Fast timeout
+            sock.connect((ip, port))
+            
+            # Sending RTSP DESCRIBE request
+            # We look for 200 OK or 401 Unauthorized (which means path exists but needs auth)
+            # 404 Not Found means path is wrong
+            request = f"DESCRIBE rtsp://{ip}:{port}{path} RTSP/1.0\r\nCSeq: 1\r\n\r\n"
+            sock.sendall(request.encode())
+            
+            response = sock.recv(1024).decode('utf-8', errors='ignore')
+            sock.close()
+            
+            if "RTSP/1.0 200 OK" in response or "RTSP/1.0 401 Unauthorized" in response:
+                return True
+            return False
+        except:
+            return False
+
+    # Common RTSP Paths to Probe
+    common_rtsp_paths = [
+        "/stream1",                # Tapo/TP-Link High
+        "/stream2",                # Tapo/TP-Link Low
+        "/live",                   # Generic
+        "/h264",                   # Generic
+        "/",                       # Root
+        "/ch0",                    # Generic
+        "/Streaming/Channels/101", # Hikvision
+        "/cam/realmonitor?channel=1&subtype=0", # Dahua
+        "/onvif1",                 # ONVIF
+        "/profile1/media.smp"      # Some Axis/Others
+    ]
+
     # Merge scan results
     for ip, port in scan_results:
+        print(f">>> [Discovery] Processing scan result: {ip}:{port}")
         if ip in seen_ips: continue
         
         name = f"Common Camera ({ip})"
-        url = f"rtsp://{ip}:{port}/stream"
+        url = f"rtsp://{ip}:{port}/stream" # Default fallback
         source = "Port Scan"
+        verified_path = False
         
+        if port == 554 or port == 8554:
+            # It's an RTSP port, let's probe for the correct path
+            print(f">>> [Discovery] Probing RTSP paths for {ip}:{port}...")
+            
+            # Try /stream first (default)
+            print(f">>> [Discovery] Checking default path /stream on {ip}...")
+            if check_rtsp_path(ip, port, "/stream"):
+                print(f">>> [Discovery] ✅ Default path /stream is VALID on {ip}")
+                url = f"rtsp://{ip}:{port}/stream"
+                verified_path = True
+            else:
+                # Try others
+                print(f">>> [Discovery] Default path failed. Probing {len(common_rtsp_paths)} common paths...")
+                for path in common_rtsp_paths:
+                    print(f">>> [Discovery] Probing {path} on {ip}...", end=" ", flush=True)
+                    if check_rtsp_path(ip, port, path):
+                        print(f"✅ FOUND!")
+                        print(f">>> [Discovery] Valid path identified: {path}")
+                        url = f"rtsp://{ip}:{port}{path}"
+                        if "stream1" in path: name = f"IP Camera (High Res) ({ip})"
+                        elif "stream2" in path: name = f"IP Camera (Low Res) ({ip})"
+                        elif "Channels/101" in path: name = f"Hikvision Camera ({ip})"
+                        elif "realmonitor" in path: name = f"Dahua Camera ({ip})"
+                        verified_path = True
+                        break
+                    else:
+                        print("❌")
+            
+            if not verified_path:
+                print(f">>> [Discovery] ⚠️ Could not determine exact path for {ip}, defaulting to /stream")
+            
+            if not verified_path:
+                print(f">>> [Discovery] Could not determine exact path for {ip}, defaulting to /stream")
+
         if port == 4747:
             name = f"DroidCam ({ip})"
             url = f"http://{ip}:4747/mjpegfeed" # Correct for DroidCam

@@ -72,8 +72,26 @@ body {
     -webkit-text-stroke: 0;
     font-weight: 400;
     letter-spacing: 0.01em;
-    /* Layout containment untuk prevent overflow */
-    contain: layout style;
+    /* Layout containment removed to fix position: fixed/sticky issues */
+    /* contain: layout style; */
+}
+
+/* Fix for modal positioning issues */
+.navbar,
+.sidebar {
+    z-index: 1030;
+}
+
+.modal-backdrop {
+    z-index: 1040 !important;
+}
+
+.modal {
+    z-index: 1050 !important;
+}
+
+.swal2-container {
+    z-index: 1060 !important;
 }
 
 a {
@@ -913,7 +931,18 @@ a:hover {
    ============================================ */
 
 /* Ensure all text elements are visible */
-body, p, span, div, label, small, h1, h2, h3, h4, h5, h6 {
+body,
+p,
+span,
+div,
+label,
+small,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
     color: var(--text-primary);
 }
 
@@ -964,7 +993,8 @@ select.form-select option {
 }
 
 /* Code blocks */
-code, pre {
+code,
+pre {
     color: var(--primary-light);
     background-color: var(--bg-glass);
 }
@@ -1002,7 +1032,12 @@ a:hover {
 }
 
 /* Ensure all headings are visible */
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
     color: var(--text-primary) !important;
 }
 
@@ -1025,7 +1060,8 @@ label {
 }
 
 /* Fix for strong/bold text */
-strong, b {
+strong,
+b {
     color: var(--text-primary);
     font-weight: 600;
 }

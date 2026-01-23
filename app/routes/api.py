@@ -15,6 +15,81 @@ import os
 
 api_bp = Blueprint('api', __name__)
 
+from flask import request
+from app.utils import admin_required
+
+
+@api_bp.route('/api/videos/delete', methods=['POST'])
+@login_required
+@admin_required
+def api_delete_videos():
+    """Bulk delete videos (files + db)"""
+    data = request.json
+    ids_to_delete = data.get('ids', [])
+    
+    if not ids_to_delete:
+        return jsonify({'success': False, 'message': 'No IDs provided'})
+        
+    deleted_count = 0
+    errors = 0
+    
+    for rec_id in ids_to_delete:
+        try:
+            record = PackingRecord.query.get(rec_id)
+            if not record:
+                continue
+                
+            # 1. Delete Video File
+            if record.file_video and os.path.exists(record.file_video):
+                try:
+                    os.remove(record.file_video)
+                except Exception as e:
+                    print(f"Failed to delete video file {record.file_video}: {e}")
+            
+            # 2. Delete JSON Metadata
+            if record.file_video:
+                json_path = record.file_video.rsplit('.', 1)[0] + '.json'
+                if os.path.exists(json_path):
+                    try:
+                        os.remove(json_path)
+                    except Exception as e:
+                        print(f"Failed to delete json file {json_path}: {e}")
+
+            # 3. Delete Thumbnail (Calculate path manually or store it)
+            # Use simple heuristic based on existing logic in batch generator
+            if record.file_video:
+                import hashlib
+                video_path = record.file_video.replace('\\', '/')
+                path_hash = hashlib.md5(video_path.encode()).hexdigest()
+                thumb_name = f"thumb_{path_hash}.jpg"
+                thumb_path = config.THUMBNAILS_FOLDER / thumb_name
+                if thumb_path.exists():
+                     try:
+                        os.remove(thumb_path)
+                     except:
+                        pass
+
+            # 4. Delete DB Record
+            db.session.delete(record)
+            deleted_count += 1
+            
+        except Exception as e:
+            print(f"Error deleting record {rec_id}: {e}")
+            errors += 1
+            
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Database commit failed: {str(e)}'})
+
+    return jsonify({
+        'success': True,
+        'deleted': deleted_count,
+        'errors': errors
+    })
+
+
 
 @api_bp.route('/api/status')
 @login_required

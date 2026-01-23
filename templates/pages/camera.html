@@ -37,6 +37,13 @@
                     <img id="liveStream" src="" class="img-fluid d-none"
                         style="max-height: 500px; width: 100%; object-fit: contain;" alt="Live Stream">
 
+                    <!-- Local Video Element (Hidden initially) -->
+                    <video id="localVideo" class="img-fluid d-none" autoplay playsinline muted
+                        style="max-height: 500px; width: 100%; object-fit: contain;"></video>
+
+                    <!-- Hidden Canvas for Capture -->
+                    <canvas id="localCanvas" style="display:none;"></canvas>
+
                     <!-- Zoom Controls -->
                     <div id="zoomContainer" class="zoom-controls d-none">
                         <button class="zoom-btn" onclick="adjustZoom(0.5)" title="Zoom In">
@@ -273,7 +280,13 @@
                     }
                 }
 
-                // Add separator
+                // Add Local Client Camera option
+                const localOption = document.createElement('option');
+                localOption.value = 'local_client_device';
+                localOption.text = '📱 Local Camera (Client Device)';
+                localOption.style.fontWeight = 'bold';
+                select.add(localOption);
+
                 const separator = document.createElement('option');
                 separator.disabled = true;
                 separator.text = '──────────';
@@ -305,6 +318,18 @@
             return;
         }
 
+        // 1. Matikan kamera sebelumnya jik ada (Release OLD first)
+        if (selectedCameraUrl && selectedCameraUrl !== url) {
+            console.log('>>> [Camera] Switching... Releasing old camera:', selectedCameraUrl);
+            const data = JSON.stringify({ url: selectedCameraUrl });
+            fetch('/api/camera/release', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                keepalive: true,
+                body: data
+            }).catch(e => console.log('Release failed', e));
+        }
+
         const infoUrl = document.getElementById('info-url');
         if (infoUrl && url) infoUrl.textContent = url;
 
@@ -333,6 +358,18 @@
         const liveStream = document.getElementById('liveStream');
         liveStream.classList.add('d-none');
         liveStream.removeAttribute('src'); // Stop stream
+
+        // Stop Local Stream
+        const localVideo = document.getElementById('localVideo');
+        if (localVideo) {
+            localVideo.classList.add('d-none');
+            localVideo.pause();
+            localVideo.srcObject = null;
+        }
+        if (window.localStream) {
+            window.localStream.getTracks().forEach(track => track.stop());
+            window.localStream = null;
+        }
 
         // document.getElementById('capturedImage').classList.add('d-none');
         document.getElementById('feedbackArea').innerHTML = '';
@@ -392,13 +429,19 @@
         if (healthCheckInterval) clearInterval(healthCheckInterval);
 
         const img = document.getElementById('liveStream');
+        const video = document.getElementById('localVideo'); // Local Video Element
         const placeholder = document.getElementById('cameraPlaceholder');
         const feedback = document.getElementById('feedbackArea');
 
-        // Reset state: Show image container
-        // 2. Show LOADING UI in the box
-        img.style.display = 'none';
-        img.classList.add('d-none');
+        // Reset state
+        img.style.display = 'none'; img.classList.add('d-none');
+        video.style.display = 'none'; video.classList.add('d-none');
+
+        // Stop any existing local stream
+        if (window.localStream) {
+            window.localStream.getTracks().forEach(track => track.stop());
+            window.localStream = null;
+        }
 
         placeholder.classList.remove('d-none');
         placeholder.style.display = 'flex';
@@ -413,21 +456,21 @@
         `;
 
         // 3. Define disconnect UI Helper
-        const showDisconnectUI = () => {
+        const showDisconnectUI = (msg = null) => {
             if (healthCheckInterval) clearInterval(healthCheckInterval);
             const btnCheck = document.getElementById('btnCheck');
+            const disconnectMsg = msg || "Kamera tidak merespon atau koneksi hilang.";
 
             feedback.innerHTML = `
                 <div class="alert alert-danger d-flex align-items-center mb-0">
                     <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
-                    <div><strong>Koneksi Gagal</strong><br>Pastikan kamera aktif dan URL benar.</div>
+                    <div><strong>Koneksi Gagal</strong><br>${disconnectMsg}</div>
                 </div>
             `;
 
-            // Hide image
-            img.style.display = 'none';
-            img.classList.add('d-none');
-            img.removeAttribute('src');
+            // Hide media
+            img.style.display = 'none'; img.classList.add('d-none'); img.removeAttribute('src');
+            video.style.display = 'none'; video.classList.add('d-none');
 
             // Show placeholder with retry
             placeholder.classList.remove('d-none');
@@ -436,7 +479,7 @@
                 <div class="text-center">
                     <i class="fs-1 mb-3 text-danger">⚠️</i>
                     <h4 class="text-danger">Koneksi Terputus</h4>
-                    <p class="text-light">Kamera tidak merespon atau koneksi hilang.</p>
+                    <p class="text-light">${disconnectMsg}</p>
                     <button class="btn btn-primary mt-2" onclick="startPreview()">🔄 Hubungkan Ulang</button>
                 </div>
             `;
@@ -449,7 +492,48 @@
             document.getElementById('btnReset').classList.add('d-none');
         };
 
-        // Setup stream handlers
+        // --- LOCAL CAMERA LOGIC ---
+        if (selectedCameraUrl === 'local_client_device') {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showDisconnectUI("Browser Anda tidak mendukung akses kamera (HTTPS required).");
+                return;
+            }
+
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => {
+                    window.localStream = stream;
+                    video.srcObject = stream;
+                    video.onloadedmetadata = () => {
+                        video.play();
+
+                        // UI SUCCESS
+                        feedback.innerHTML = `
+                            <div class="alert alert-success d-flex align-items-center mb-0">
+                                <i class="bi bi-camera-video-fill me-2 fs-5"></i>
+                                <div><strong>🟢 Local Camera Online</strong></div>
+                            </div>
+                        `;
+                        placeholder.classList.add('d-none');
+                        placeholder.style.display = 'none';
+                        video.classList.remove('d-none');
+                        video.style.display = 'block';
+
+                        document.getElementById('btnCheck').classList.add('d-none');
+                        document.getElementById('btnCapture').classList.remove('d-none');
+                        document.getElementById('btnReset').classList.remove('d-none');
+
+                        // Hide zoom for local (not supported via web API easily yet)
+                        document.getElementById('zoomContainer').classList.add('d-none');
+                    };
+                })
+                .catch(err => {
+                    console.error("Local Cam Error:", err);
+                    showDisconnectUI("Gagal membuka kamera lokal. Izin ditolak atau tidak ditemukan.");
+                });
+            return;
+        }
+
+        // --- BACKEND STREAM LOGIC ---
         // Setup stream handlers with Retry Logic
         let retryCount = 0;
         const maxRetries = 3;
@@ -510,7 +594,7 @@
         if (healthCheckInterval) clearInterval(healthCheckInterval);
 
         healthCheckInterval = setInterval(() => {
-            if (!selectedCameraUrl) return;
+            if (!selectedCameraUrl || selectedCameraUrl === 'local_client_device') return;
 
             fetch(`/api/camera/check?url=${encodeURIComponent(selectedCameraUrl)}&t=${Date.now()}`)
                 .then(res => res.json())
@@ -528,39 +612,55 @@
         setTimeout(() => {
             if (feedback.innerHTML.includes('Menghubungkan')) {
                 // Still connecting after 10s = timeout
-                feedback.innerHTML = `
-                    <div class="alert alert-danger">
-                        <strong><i class="bi bi-x-circle me-2"></i>Koneksi Timeout</strong><br>
-                        Kamera tidak merespon dalam 10 detik.
-                    </div>
-                `;
-
-                img.style.display = 'none';
-                img.classList.add('d-none');
-
-                placeholder.classList.remove('d-none');
-                placeholder.style.display = 'flex';
-                placeholder.innerHTML = `
-                    <div class="text-center">
-                        <i class="fs-1 mb-3 text-danger">⚠️</i>
-                        <h4 class="text-danger">Koneksi Timeout</h4>
-                        <p class="text-light">Kamera tidak merespon dalam 10 detik.</p>
-                        <button class="btn btn-primary mt-2" onclick="startPreview()">🔄 Coba Lagi (Retry)</button>
-                    </div>
-                `;
-
-                // Reset buttons
-                document.getElementById('btnCheck').classList.remove('d-none');
-                document.getElementById('btnCheck').disabled = false;
-                document.getElementById('btnCheck').innerHTML = '<i class="bi bi-search me-2"></i>Check Camera';
-                document.getElementById('btnCapture').classList.add('d-none');
-                document.getElementById('btnReset').classList.add('d-none');
+                showDisconnectUI("Kamera tidak merespon dalam 10 detik (Timeout).");
             }
         }, 10000);
     }
 
     // RENAMED TO performCapture TO AVOID CONFLICT WITH app.js' captureFrame
     function performCapture() {
+        // --- LOCAL CAPTURE LOGIC ---
+        if (selectedCameraUrl === 'local_client_device') {
+            const video = document.getElementById('localVideo');
+            const canvas = document.getElementById('localCanvas');
+            const feedback = document.getElementById('feedbackArea');
+
+            if (!video || !window.localStream) {
+                alert("Local camera not active!");
+                return;
+            }
+
+            try {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                // Get Base64
+                const dataURL = canvas.toDataURL('image/jpeg', 0.95);
+
+                // Show Modal Manually
+                const modalImg = document.getElementById('modalCaptureImage');
+                const downloadBtn = document.getElementById('btnDownloadModal');
+                const modalEl = document.getElementById('captureModal');
+
+                if (modalImg) modalImg.src = dataURL;
+                if (downloadBtn) {
+                    downloadBtn.href = dataURL;
+                    downloadBtn.setAttribute('download', `local_capture_${Date.now()}.jpg`);
+                }
+
+                const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                modal.show();
+
+            } catch (e) {
+                console.error("Local capture error", e);
+                feedback.innerHTML = `<div class="alert alert-danger">Capture failed: ${e.message}</div>`;
+            }
+            return;
+        }
+
+        // --- BACKEND CAPTURE LOGIC (EXISTING) ---
         const select = document.getElementById('cameraSelect');
         const url = select.value;
         const btnCapture = document.getElementById('btnCapture');
@@ -612,7 +712,7 @@
                         }
 
                         // ALERT SUCCESS to confirm execution
-                        alert("Capture Successful! Opening Image...");
+                        // alert("Capture Successful! Opening Image...");
 
                         // Initialize and show modal
                         console.log('[Capture] Initializing Bootstrap Modal check...');

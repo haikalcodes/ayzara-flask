@@ -105,34 +105,65 @@
                 <div class="mb-3">
                     <label class="form-label">Metode Input Resi</label>
                     <div class="btn-group w-100" role="group">
-                        <input type="radio" class="btn-check" name="input-method" id="method-scanner" value="scanner"
-                            checked>
+                        <input type="radio" class="btn-check" name="input-method" id="method-scanner" value="scanner">
                         <label class="btn btn-outline-primary" for="method-scanner"><i class="bi bi-phone me-1"></i>
                             Scanner Barcode</label>
 
-                        <input type="radio" class="btn-check" name="input-method" id="method-camera" value="camera">
+                        <input type="radio" class="btn-check" name="input-method" id="method-camera" value="camera"
+                            checked>
                         <label class="btn btn-outline-primary" for="method-camera"><i class="bi bi-camera me-1"></i>
                             Deteksi Kamera</label>
                     </div>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label">Pilih Kamera</label>
-                    <div class="input-group">
-                        <select id="camera-select" class="form-select" onchange="handleCameraChange(this.value)">
-                            <option value="" disabled selected>Pilih kamera...</option>
-                        </select>
-                        <button class="btn btn-outline-danger" type="button" onclick="closeCameraConnection()"
+                    <label class="form-label fw-bold">Konfigurasi Kamera</label>
+
+                    <!-- Scanning Camera (Conditional) - NOW ON TOP -->
+                    <div class="mb-3" id="scan-camera-row" style="display:none;">
+                        <label class="form-label small text-muted mb-1"><i class="bi bi-upc-scan me-1"></i> Kamera
+                            Scanner (Barcode)</label>
+                        <div class="input-group">
+                            <select id="camera-select-scanning" class="form-select"
+                                onchange="handleScanningCameraChange(this.value)">
+                                <option value="" disabled selected>Pilih kamera scan...</option>
+                            </select>
+                            <button class="btn btn-outline-primary" type="button" onclick="connectScanningCamera()"
+                                title="Connect/Reload" id="btn-connect-scan">
+                                <i class="bi bi-play-fill"></i> Connect
+                            </button>
+                        </div>
+                        <div class="form-text small text-info">
+                            <i class="bi bi-info-circle me-1"></i> Kamera scan bisa sama dengan perekam (Khusus sesama
+                            Kamera Server).
+                        </div>
+                    </div>
+
+                    <!-- Recording Camera (Always Visible) - NOW BELOW -->
+                    <div class="mb-3">
+                        <label class="form-label small text-muted mb-1"><i class="bi bi-camera-video me-1"></i> Kamera
+                            Perekam (Video)</label>
+                        <div class="input-group">
+                            <select id="camera-select-recording" class="form-select"
+                                onchange="handleRecordingCameraChange(this.value)">
+                                <option value="" disabled selected>Pilih kamera rekam...</option>
+                            </select>
+                            <button class="btn btn-outline-primary" type="button" onclick="connectRecordingCamera()"
+                                title="Connect/Reload" id="btn-connect-rec">
+                                <i class="bi bi-play-fill"></i> Connect
+                            </button>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="d-grid">
+                        <button class="btn btn-outline-danger btn-sm" type="button" onclick="closeAllCameras()"
                             title="Tutup Kamera">
-                            <i class="bi bi-x-circle me-1"></i> Tutup
+                            <i class="bi bi-x-circle me-1"></i> Tutup & Reset Semua
                         </button>
                     </div>
-                    <div class="d-grid mt-2">
-                        <button class="btn btn-success" type="button" onclick="if(selectedCameraUrl) startPreview()"
-                            title="Hubungkan Paksa">
-                            <i class="bi bi-play-fill me-1"></i> Hubungkan (Manual)
-                        </button>
-                    </div>
+
                     <div id="camera-status-indicator" class="mt-2 text-muted small">
                         Pilih kamera untuk cek status
                     </div>
@@ -169,30 +200,74 @@
 
     <!-- Right Column: Preview & Action -->
     <div class="col-md-8">
-        <!-- Preview Area -->
+
+        <!-- TOP: SCANNER PREVIEW / INPUT -->
+        <div class="card mb-3 border-primary shadow-sm">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="bi bi-upc-scan me-2"></i>Scanner Area</h6>
+                <span class="badge bg-primary" id="scan-status-badge">Ready</span>
+            </div>
+
+            <!-- Scanner Body -->
+            <div id="scanner-container" class="card-body bg-dark text-center p-0 position-relative"
+                style="min-height: 150px;">
+
+                <!-- 1. Manual Input (Physical Scanner Mode) -->
+                <div id="manual-input-area" class="p-4">
+                    <div class="input-group input-group-lg">
+                        <span class="input-group-text bg-secondary text-white border-secondary"><i
+                                class="bi bi-upc-scan"></i></span>
+                        <input type="text" id="resi-input"
+                            class="form-control font-monospace text-center bg-dark text-white border-secondary"
+                            placeholder="Scan Barcode Resi Disini..." autocomplete="off" style="caret-color: #0d6efd;">
+                    </div>
+                </div>
+
+                <!-- 2. Local Reader Area (Client Camera) -->
+                <!-- Use a slightly taller container for better local camera view -->
+                <div id="local-reader-area" class="d-none text-center p-2">
+                    <div id="reader-wrapper"
+                        style="width: 100%; max-width: 400px; margin: 0 auto; border: 2px solid #555; border-radius: 8px; overflow: hidden; background: #000;">
+                        <div id="html5-qrcode-reader"></div>
+                    </div>
+                </div>
+
+                <!-- 3. Backend Scanner Preview (Server Camera) -->
+                <div id="backend-scan-area"
+                    class="d-none w-100 h-100 bg-black d-flex justify-content-center align-items-center"
+                    style="min-height: 250px;">
+                    <img id="backend-scan-feed" src="" class="img-fluid"
+                        style="max-height: 300px; width: 100%; object-fit: contain;">
+                </div>
+
+                <!-- Scanning Visual Overlay (Shared) -->
+                <div id="scan-visual-overlay" class="position-absolute top-0 start-0 w-100 h-100 d-none"
+                    style="background: rgba(40, 167, 69, 0.1); border: 4px solid #28a745; z-index: 50; pointer-events: none;">
+                </div>
+
+            </div>
+        </div>
+
+        <!-- BOTTOM: RECORDING PREVIEW -->
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <h5>3. Scan & Rekam</h5>
+                <h5>3. Rekam Video (Bukti)</h5>
                 <div id="recording-timer" class="h4 mb-0 font-monospace d-none">00:00</div>
             </div>
-            <div class="card-body p-0 position-relative bg-dark text-center"
-                style="min-height: 400px; overflow: hidden;">
+
+            <div id="camera-container" class="card-body p-0 position-relative bg-dark text-center"
+                style="min-height: 480px; overflow: hidden; background-color: #000; position: relative;">
                 <!-- Camera Image -->
                 <img id="camera-feed" src="" class="img-fluid"
                     style="width: 100%; height: 100%; object-fit: contain; display: none;">
-                <!-- Scanning Visual Overlay -->
-                <div id="scan-visual-overlay" class="position-absolute top-0 start-0 w-100 h-100 d-none"
-                    style="background: rgba(40, 167, 69, 0.06);"></div>
 
                 <!-- Placeholder -->
                 <div id="camera-placeholder"
-                    class="d-flex flex-column justify-content-center align-items-center h-100 text-muted p-5">
+                    class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center align-items-center text-muted p-5 bg-dark">
                     <i class="fs-1 mb-3 bi bi-record-circle text-danger"></i>
-                    <h4>Kamera Belum Aktif</h4>
-                    <p>Pilih kamera di sebelah kiri untuk memulai preview</p>
+                    <h4>Kamera Rekam Off</h4>
+                    <p>Silakan hubungkan kamera rekam di menu sebelah kiri</p>
                 </div>
-
-                <!-- Scanner Overlay REMOVED -->
 
                 <!-- Recording Overlay -->
                 <div id="recording-overlay"
@@ -218,21 +293,6 @@
                     </button>
                 </div>
                 <div id="zoom-indicator" class="zoom-info">Zoom: 1.0x</div>
-            </div>
-            <!-- New Location: Below Camera Feed, Above Footer -->
-            <!-- New Location: Below Camera Feed, Above Footer -->
-            <div id="scanner-container" class="card-body border-top border-secondary bg-dark d-none"
-                style="background-color: #212529 !important;">
-                <div class="input-group input-group-lg">
-                    <span class="input-group-text bg-secondary text-white border-secondary"><i
-                            class="bi bi-upc-scan"></i></span>
-                    <input type="text" id="resi-input"
-                        class="form-control font-monospace text-center bg-dark text-white border-secondary"
-                        placeholder="Scan Barcode Resi Disini..." autocomplete="off" style="caret-color: #0d6efd;">
-                </div>
-                <div class="form-text text-center text-muted mt-2">
-                    <i class="bi bi-info-circle me-1"></i>Arahkan cursor ke sini untuk scan. Auto-focus aktif.
-                </div>
             </div>
 
             <div class="card-footer">
@@ -334,26 +394,38 @@
     </div>
 </div>
 
+
 <!-- Scripts -->
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <script>
     // Configuration
     const SCAN_RATE = 700; // Barcode scan rate (ms) - quicker polling for easier detect
     const RECORDING_START_GRACE_PERIOD = 5000; // 5 seconds - don't stop immediately after start
     const BARCODE_COOLDOWN = 3000; // 3 seconds - cooldown between barcode detections
 
-    let selectedCameraUrl = '';
+    let recordingCameraUrl = ''; // Replaces selectedCameraUrl
+    let scanningCameraUrl = '';
+
+    // Core state
     let selectedPlatform = '';
     let isRecording = false;
     let recordingId = null;
     let recordingStartTime = null;
+
+    // Intervals
     let healthCheckInterval = null; // Renamed from previewInterval
     let barcodeLoopInterval = null; // New separate interval for barcode loop
     let timerInterval = null;
+
+    // Scanner
+    let html5QrCode = null; // Local scanner instance
+    let lastBarcodeDetectTime = 0; // For cooldown
+    let scanVisualEl = null; // Green scanning overlay
+
+    // Other state
     let lastRecordId = null;
     let currentResi = null; // Track current resi being recorded
-    let lastBarcodeDetectTime = 0; // For cooldown
     let lastRecordingData = null; // Store last recording data for popup
-    let scanVisualEl = null; // Green scanning overlay
     let currentZoom = 1.0;
 
     // Sound effects
@@ -395,6 +467,12 @@
         }).catch(e => console.log('updateCameraUsage failed', e));
     }
 
+    // Getter alias for backward compatibility code
+    Object.defineProperty(window, 'selectedCameraUrl', {
+        get: function () { return recordingCameraUrl; },
+        set: function (val) { recordingCameraUrl = val; }
+    });
+
     document.addEventListener('DOMContentLoaded', function () {
         console.log(">>> [Recording Page] DOM Content Loaded");
 
@@ -413,21 +491,10 @@
 
         // Wait for socket to be initialized before allowing barcode detection
         const waitForSocket = () => {
+            // ... socket logic ...
             if (window.socket && window.socket.connected) {
                 console.log(">>> [Recording Page] Socket is ready!");
-                // updateConnectionStatus('connected');
-
-                // Test socket communication
-                console.log(">>> [Recording Page] Testing socket communication...");
-                window.socket.emit('test_event', { test: 'hello from frontend' });
-
-                // Listen for test response
-                window.socket.once('test_response', (data) => {
-                    console.log(">>> [Recording Page] Test response received:", data);
-                });
             } else {
-                console.log(">>> [Recording Page] Waiting for socket...");
-                // updateConnectionStatus('connecting');
                 setTimeout(waitForSocket, 500);
             }
         };
@@ -526,24 +593,26 @@
         }
     }
 
-    // NEW: Close camera connection - unselect and stop stream
-    function closeCameraConnection() {
-        console.log('>>> [Close] Closing camera connection');
+    function closeAllCameras() {
+        console.log('>>> [Close] Closing ALL connections');
 
-        // Stop preview and release camera
         stopPreview();
+        stopScanning();
 
-        // Reset camera selection
-        selectedCameraUrl = '';
-        const select = document.getElementById('camera-select');
-        if (select) select.value = '';
+        recordingCameraUrl = '';
+        document.getElementById('camera-select-recording').value = '';
 
-        // Reset platform selection
+        scanningCameraUrl = '';
+        document.getElementById('camera-select-scanning').value = '';
+
+        // Reset connection buttons text
+        document.getElementById('btn-connect-rec').innerHTML = '<i class="bi bi-play-fill"></i> Connect';
+        document.getElementById('btn-connect-scan').innerHTML = '<i class="bi bi-play-fill"></i> Connect';
+
         selectedPlatform = '';
         const platformInput = document.getElementById('selected-platform');
         if (platformInput) platformInput.value = '';
 
-        // Reset platform buttons
         document.querySelectorAll('.platform-btn').forEach(b => {
             b.classList.remove('active', 'btn-success', 'btn-secondary');
             b.classList.add('btn-outline-secondary');
@@ -580,12 +649,6 @@
         const scannerContainer = document.getElementById('scanner-container');
         if (scannerContainer) scannerContainer.classList.add('d-none');
 
-        // Update status
-        updateStatus('Kamera ditutup. Pilih kamera untuk memulai kembali.');
-
-        // Update reset button visibility
-        updateResetButtonVisibility();
-
         // Hide zoom controls
         document.getElementById('zoom-container').classList.add('d-none');
         document.getElementById('zoom-indicator').style.display = 'none';
@@ -595,7 +658,8 @@
 
     // 1. Load Cameras
     function loadCameras() {
-        const select = document.getElementById('camera-select');
+        const selectRec = document.getElementById('camera-select-recording');
+        const selectScan = document.getElementById('camera-select-scanning');
 
         // Fetch from cache first for speed
         fetch('/api/cameras/status')
@@ -607,73 +671,338 @@
                 return fetch('/api/cameras')
                     .then(res => res.json())
                     .then(configData => {
-                        select.innerHTML = '<option value="" disabled selected>Pilih kamera...</option>';
+                        // Reset dropdowns
+                        selectRec.innerHTML = '<option value="" disabled selected>Pilih kamera rekam...</option>';
+                        selectScan.innerHTML = '<option value="" disabled selected>Pilih kamera scan...</option>';
+
+                        // Add Local Client Camera option to Scan Dropdown
+                        const localOption = document.createElement('option');
+                        localOption.value = 'local_client_device';
+                        localOption.text = '📱 Local Camera (Client Device)';
+                        localOption.style.fontWeight = 'bold';
+                        selectScan.add(localOption);
 
                         const savedCamera = localStorage.getItem('last_camera_url');
                         let foundSaved = false;
 
+                        const savedScanCamera = localStorage.getItem('last_scan_camera_url');
+                        let foundSavedScan = false;
+
+                        // Check if saved scan camera is local
+                        if (savedScanCamera === 'local_client_device') {
+                            localOption.selected = true;
+                            scanningCameraUrl = 'local_client_device';
+                            foundSavedScan = true;
+                        }
+
+                        selectScan.add(localOption); // Add local option first
+
                         (configData.cameras || []).forEach(cam => {
                             const status = Object.values(statuses).find(s => s.url === cam.url);
-                            const isOnline = status ? status.online : false;
-                            const icon = isOnline ? '🟢' : '🔴';
+                            // const isOnline = status ? status.online : false; 
+                            // Using name directly as provided in original code structure for now
 
-                            const option = document.createElement('option');
-                            option.value = cam.url;
-                            option.text = `📷 ${cam.name}`; // Always clickable
+                            // Rec Option
+                            const optionRec = document.createElement('option');
+                            optionRec.value = cam.url;
+                            optionRec.text = `📷 ${cam.name}`;
+                            selectRec.add(optionRec);
 
-                            if (savedCamera && cam.url === savedCamera) {
-                                option.selected = true;
-                                foundSaved = true;
+                            // Scan Option
+                            const optionScan = document.createElement('option');
+                            optionScan.value = cam.url;
+                            optionScan.text = `📷 ${cam.name}`;
+
+                            // Check for saved scan camera match
+                            if (savedScanCamera && cam.url === savedScanCamera) {
+                                optionScan.selected = true;
+                                scanningCameraUrl = cam.url; // Set variable
+                                foundSavedScan = true;
                             }
 
-                            select.add(option);
+                            selectScan.add(optionScan);
+
+                            if (savedCamera && cam.url === savedCamera) {
+                                optionRec.selected = true;
+                                foundSaved = true;
+                            }
                         });
 
-                        // ADD NEW: Add "Add Camera" option
+                        // Add "Add Camera" option to Recording
                         const addOption = document.createElement('option');
                         addOption.value = '__add_new__';
                         addOption.text = '➕ Tambah Kamera Baru...';
                         addOption.style.fontWeight = 'bold';
-                        addOption.style.color = '#0d6efd'; // Bootstrap primary color
-                        select.add(addOption);
+                        addOption.style.color = '#0d6efd';
+                        selectRec.add(addOption);
+
+                        // Add "Add Camera" option to Scanning (CLONED for Scan)
+                        const addOptionScan = document.createElement('option');
+                        addOptionScan.value = '__add_new__';
+                        addOptionScan.text = '➕ Tambah Kamera Baru...';
+                        addOptionScan.style.fontWeight = 'bold';
+                        addOptionScan.style.color = '#0d6efd';
+                        selectScan.add(addOptionScan);
 
                         // If saved selection found, activate it
                         if (foundSaved) {
-                            handleCameraChange(savedCamera);
+                            // Don't auto-connect, let user click connect
+                            recordingCameraUrl = savedCamera;
                         }
                     });
             });
-
-
     }
 
-    function handleCameraChange(url) {
-        // NEW: Redirect if "Add Camera" is selected
+    // Handlers
+    function handleRecordingCameraChange(url) {
         if (url === '__add_new__') {
             window.location.href = '/camera-settings';
-            // Reset selection to default/empty to prevent "Add Camera" from staying selected if they come back
-            document.getElementById('camera-select').value = "";
             return;
         }
 
-        // SAVE PREFERENCE
-        if (url) {
-            localStorage.setItem('last_camera_url', url);
-        }
+        // 1. Matikan kamera yang lagi dipakai (Stop OLD first)
+        // We must stop BEFORE updating the variable, so stopPreview releases the correct URL
+        stopPreview();
 
-        selectedCameraUrl = url;
-        // startPreview(); <-- REMOVED to enforce manual connection
+        // 2. Baru pindah ke kamera baru
+        recordingCameraUrl = url;
+        localStorage.setItem('last_camera_url', url);
 
-        const indicator = document.getElementById('camera-status-indicator');
-        indicator.innerHTML = '<span class="text-info">ℹ️ Kamera dipilih. Klik tombol "Connect" untuk memulai.</span>';
+        // Update button text to "Connect"
+        const btn = document.getElementById('btn-connect-rec');
+        if (btn) btn.innerHTML = '<i class="bi bi-play-fill"></i> Connect';
 
-        // Update button visibility (initially hidden until connected)
-        updateResetButtonVisibility();
+        checkReadyState();
     }
 
+    function connectRecordingCamera() {
+        if (!recordingCameraUrl) {
+            alert("Pilih kamera rekam terlebih dahulu!");
+            return;
+        }
+
+        // Check if button says "Reload"
+        // Actually, just calling startPreview() essentially "reloads" or "connects"
+        startPreview();
+
+        // Change button to "Reload"
+        const btn = document.getElementById('btn-connect-rec');
+        if (btn) btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Reload';
+    }
+
+    function handleScanningCameraChange(url) {
+        if (url === '__add_new__') {
+            window.location.href = '/camera-settings';
+            return;
+        }
+
+        // 1. Matikan kamera scan yang lagi dipakai
+        stopScanning();
+
+        // 2. Baru switch
+        scanningCameraUrl = url;
+        localStorage.setItem('last_scan_camera_url', url); // SAVE PREFERENCE
+
+        const btn = document.getElementById('btn-connect-scan');
+        if (btn) btn.innerHTML = '<i class="bi bi-play-fill"></i> Connect';
+
+        checkReadyState();
+    }
+
+    function connectScanningCamera() {
+        if (!scanningCameraUrl) {
+            alert("Pilih kamera scan terlebih dahulu!");
+            return;
+        }
+
+        startScanning();
+
+        const btn = document.getElementById('btn-connect-scan');
+        if (btn) btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Reload';
+    }
+
+    // Stop all scanning logic
+    function stopScanning() {
+        // 1. Stop Local
+        if (html5QrCode) {
+            try {
+                if (html5QrCode.isScanning) {
+                    html5QrCode.stop().catch(err => console.log("Stop failed", err));
+                }
+            } catch (e) { console.log("Stop error", e); }
+            html5QrCode = null;
+        }
+
+        // Hide All Areas first
+        document.getElementById('local-reader-area').classList.add('d-none');
+        document.getElementById('backend-scan-area').classList.add('d-none');
+        // Do NOT unhide manual input here indiscriminately. Let setupInputMethod handle that.
+
+        // Stop Backend Image feed
+        const backendImg = document.getElementById('backend-scan-feed');
+        if (backendImg) {
+            backendImg.src = '';
+            backendImg.removeAttribute('src');
+        }
+
+        // NEW: Explicitly release backend camera on server
+        if (scanningCameraUrl && scanningCameraUrl !== 'local_client_device') {
+            console.log('>>> [Scan] Releasing backend camera:', scanningCameraUrl);
+            const data = JSON.stringify({ url: scanningCameraUrl });
+            // Use fetch for standard operations
+            fetch('/api/camera/release', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: data
+            }).catch(e => console.log('Scan Release failed', e));
+        }
+
+        // 2. Stop Backend Loop
+        if (barcodeLoopInterval) {
+            clearTimeout(barcodeLoopInterval);
+            barcodeLoopInterval = null;
+        }
+
+        checkReadyState(); // Update status on stop
+    }
+
+    // Start scanning logic
+    function startScanning() {
+        stopScanning(); // Clean slate
+
+        const container = document.getElementById('scanner-container');
+        container.classList.remove('d-none'); // Top Card Body
+
+        if (scanningCameraUrl === 'local_client_device') {
+            console.log(">>> MUST START LOCAL SCANNING");
+            // Show Local Reader UI
+            document.getElementById('manual-input-area').classList.add('d-none');
+            document.getElementById('backend-scan-area').classList.add('d-none');
+            document.getElementById('local-reader-area').classList.remove('d-none');
+
+            // Initialize Html5Qrcode
+            // Use back camera
+            html5QrCode = new Html5Qrcode("html5-qrcode-reader");
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+            // CHECK SECURE CONTEXT
+            if (window.isSecureContext === false) {
+                alert("⚠️ Peringatan: Browser Anda memblokir akses kamera karena koneksi tidak aman (HTTP). \n\nSolusi:\n1. Gunakan HTTPS jika tersedia.\n2. Atau buka chrome://flags di HP, cari 'Insecure origins treated as secure', lalu enable dan masukkan IP server ini.");
+            }
+
+            html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
+                .catch(err => {
+                    console.log("Local camera start failed", err);
+                    let msg = "Gagal membuka kamera lokal.";
+                    if (err?.toString().includes("is not supported")) {
+                        msg = "Browser ini tidak mendukung streaming kamera atau koneksi tidak aman (HTTP). Coba gunakan Chrome/Safari terbaru dan pastikan akses via HTTPS atau Localhost.";
+                    } else if (err?.name === "NotAllowedError") {
+                        msg = "Izin kamera ditolak. Mohon izinkan akses kamera di browser.";
+                    } else {
+                        msg += " Error: " + err;
+                    }
+                    alert(msg);
+                });
+
+        } else {
+            console.log(">>> MUST START BACKEND SCANNING for", scanningCameraUrl);
+            // Backend Scanning
+            document.getElementById('local-reader-area').classList.add('d-none');
+            document.getElementById('manual-input-area').classList.add('d-none');
+
+            // Show Backend Feed
+            const backendArea = document.getElementById('backend-scan-area');
+            backendArea.classList.remove('d-none');
+            // Ensure container has relative styling for absolute positioning of loader if needed, 
+            // and min-height to prevent zero-height collapse
+            backendArea.style.position = 'relative';
+            backendArea.style.minHeight = '240px';
+            backendArea.style.backgroundColor = '#000'; // Black background for video area
+
+            const feedImg = document.getElementById('backend-scan-feed');
+
+            // Reset image visibility to ensure clean load state
+            feedImg.style.display = 'none';
+            feedImg.classList.add('d-none');
+            // Clear src to stop previous stream if any
+            feedImg.removeAttribute('src');
+
+            // Find or create 'loading' overlay within the area
+            let loadingText = document.getElementById('scan-loading-text');
+            if (!loadingText) {
+                loadingText = document.createElement('div');
+                loadingText.id = 'scan-loading-text';
+                loadingText.className = 'd-flex justify-content-center align-items-center flex-column text-info';
+                loadingText.style.position = 'absolute';
+                loadingText.style.top = '0';
+                loadingText.style.left = '0';
+                loadingText.style.width = '100%';
+                loadingText.style.height = '100%';
+                loadingText.style.zIndex = '10';
+                loadingText.innerHTML = `
+                    <div class="spinner-border mb-2" role="status" style="width: 2rem; height: 2rem;"></div>
+                    <span>Menghubungkan kamera scan...</span>
+                `;
+                backendArea.appendChild(loadingText);
+            }
+            // Ensure visual reset
+            loadingText.style.display = 'flex';
+            loadingText.style.setProperty('display', 'flex', 'important');
+            loadingText.innerHTML = `
+                <div class="spinner-border mb-2" role="status" style="width: 2rem; height: 2rem;"></div>
+                <span>Menghubungkan kamera scan...</span>
+            `;
+
+            feedImg.onload = function () {
+                console.log('>>> [Scan] Backend camera loaded');
+                feedImg.style.display = 'block';
+                feedImg.classList.remove('d-none');
+
+                // Force hide the loading text overlay
+                const loader = document.getElementById('scan-loading-text');
+                if (loader) {
+                    loader.style.display = 'none';
+                    loader.style.setProperty('display', 'none', 'important');
+                }
+            };
+
+            feedImg.onerror = function () {
+                console.log('>>> [Scan] Backend camera load error');
+                const loader = document.getElementById('scan-loading-text');
+                if (loader) {
+                    loader.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle me-2"></i>Gagal menghubungkan kamera scan.</span>';
+                }
+            };
+
+            // Small delay to allow UI to settle before requesting stream
+            setTimeout(() => {
+                feedImg.src = `/video_feed?url=${encodeURIComponent(scanningCameraUrl)}&t=${new Date().getTime()}`;
+            }, 50);
+
+            startBarcodeLoop();
+        }
+
+        // Give a moment for elements to update classes then check
+        setTimeout(checkReadyState, 500);
+    }
+
+    function onScanSuccess(decodedText, decodedResult) {
+        console.log(`Code matched = ${decodedText}`, decodedResult);
+        handleResiDetected(decodedText);
+    }
+
+
+    // Global connection state
+    let isConnecting = false;
+
     // 2. Camera Preview (Persistent Stream)
+    // NOTE: This now only handles RECORDING camera preview
     function startPreview() {
-        console.log('>>> [Preview] Starting preview for:', selectedCameraUrl);
+        if (!recordingCameraUrl) return;
+
+        selectedCameraUrl = recordingCameraUrl; // Sync for compatibility
+
+        console.log('>>> [Preview] Starting preview for:', recordingCameraUrl);
 
         // Clear any existing timeout
         if (healthCheckInterval) clearInterval(healthCheckInterval);
@@ -682,7 +1011,13 @@
         const placeholder = document.getElementById('camera-placeholder');
         const indicator = document.getElementById('camera-status-indicator');
 
+        // Safety Clean
+        img.onload = null;
+        img.onerror = null;
+
+
         // Set initial connecting status
+        isConnecting = true; // LOCK PLATFORM SELECTION
         if (indicator) {
             indicator.innerHTML = '<span class="text-info">🔵 Menghubungkan...</span>';
         }
@@ -696,17 +1031,75 @@
         placeholder.classList.add('d-none');
         placeholder.style.display = 'none'; // Doubletap
 
+        // NEW: Add temporary loading overlay for Recording Camera Container
+        const container = document.getElementById('camera-container'); // This is the parent div
+        let loadingOverlay = document.getElementById('rec-loading-overlay');
+
+        // Ensure container is relative for absolute positioning AND has height
+        if (container) {
+            container.style.position = 'relative';
+            // CRITICAL FIX: Set min-height so the container doesn't collapse when the image is hidden!
+            // Assuming standard video aspect ratio or fixed UI height
+            container.style.minHeight = '480px';
+            container.style.backgroundColor = '#000';
+        }
+
+        // HIDE IMAGE INITIALLY to show loader
+        img.style.display = 'none';
+        img.classList.add('d-none');
+
+        if (!loadingOverlay && container) {
+            loadingOverlay = document.createElement('div');
+            loadingOverlay.id = 'rec-loading-overlay';
+            loadingOverlay.className = 'position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center align-items-center';
+            loadingOverlay.style.zIndex = '200'; // Even Higher z-index to be safe
+            loadingOverlay.style.backgroundColor = 'rgba(0,0,0,1)'; // Solid black
+
+            loadingOverlay.innerHTML = `
+                <div class="spinner-border text-white mb-3" role="status" style="width: 3rem; height: 3rem; border-width: 4px;">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <h5 class="text-white mt-2">Menghubungkan...</h5>
+                <p class="text-white-50 small">Menunggu stream dari server</p>
+            `;
+            container.appendChild(loadingOverlay);
+        } else if (loadingOverlay) {
+            loadingOverlay.style.display = 'flex';
+            loadingOverlay.classList.remove('d-none');
+            // Ensure content is fresh
+            loadingOverlay.innerHTML = `
+                <div class="spinner-border text-white mb-3" role="status" style="width: 3rem; height: 3rem; border-width: 4px;">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <h5 class="text-white mt-2">Menghubungkan...</h5>
+                <p class="text-white-50 small">Menunggu stream dari server</p>
+            `;
+        }
+
+
+
         // Setup stream monitoring
         // Helper to show disconnect UI
         const showDisconnectUI = () => {
+            isConnecting = false; // RELEASE LOCK (to allow retry or other actions)
+            if (loadingOverlay) loadingOverlay.style.display = 'none';
+
+
             const indicator = document.getElementById('camera-status-indicator');
             const img = document.getElementById('camera-feed');
             const placeholder = document.getElementById('camera-placeholder');
 
+            // Explicitly HIDE overlay if it exists
+            const overlay = document.getElementById('rec-loading-overlay');
+            if (overlay) {
+                overlay.style.display = 'none';
+                overlay.style.setProperty('display', 'none', 'important');
+            }
+
             // Update status
             // indicator.innerHTML = '<span class="text-danger">🔴 Kamera Terputus</span>';
             // RESET to default state as requested
-            indicator.innerHTML = 'Pilih kamera untuk cek status';
+            indicator.innerHTML = '<span class="text-danger">⚠️ Koneksi Gagal</span>';
 
             // LOCKDOWN: Clear platform
             selectedPlatform = '';
@@ -723,14 +1116,19 @@
             updateResetButtonVisibility();
 
             // Hide image
-            img.style.display = 'none';
-            img.classList.add('d-none');
-            img.removeAttribute('src'); // Stop browser from trying to load
+            if (img) {
+                img.style.display = 'none';
+                img.classList.add('d-none');
+                img.removeAttribute('src'); // Stop browser from trying to load
+            }
 
             // Stop scanner mode if active
-            const scContainer = document.getElementById('scanner-container');
-            if (scContainer) scContainer.classList.add('d-none');
+            // const scContainer = document.getElementById('scanner-container');
+            // if (scContainer) scContainer.classList.add('d-none');
+
             updateStatus('Kamera terputus. Silakan hubungkan ulang.');
+
+            checkReadyState(); // Update Ready Text (will clear 'Siap merekam')
 
             // Show placeholder with retry
             placeholder.classList.remove('d-none');
@@ -740,7 +1138,10 @@
                 <i class="fs-1 mb-3 text-danger">⚠️</i>
                 <h4 class="text-danger">Koneksi Terputus</h4>
                 <p>Kamera tidak merespon atau koneksi hilang.</p>
-                <button class="btn btn-primary mt-2" onclick="startPreview()">🔄 Hubungkan Ulang</button>
+                <div class="d-flex flex-column gap-2 mt-2">
+                    <button class="btn btn-primary" onclick="startPreview()">🔄 Hubungkan Ulang</button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="closeAllCameras()">❌ Tutup Semua</button>
+                </div>
             `;
         };
 
@@ -749,6 +1150,19 @@
 
         img.onload = function () {
             connectionSucceeded = true;
+            isConnecting = false; // UNLOCK PLATFORM SELECTION
+
+            // Explicitly find overlay again to be sure
+            const overlay = document.getElementById('rec-loading-overlay');
+            if (overlay) {
+                overlay.style.display = 'none';
+                overlay.style.setProperty('display', 'none', 'important');
+            }
+
+            // SHOW IMAGE NOW
+            this.style.display = 'block';
+            this.classList.remove('d-none');
+
             console.log('>>> [Preview] Camera connected successfully');
 
             // UPDATED: Prompt for platform selection if not set
@@ -760,6 +1174,7 @@
                 indicator.innerHTML = '<span class="text-success">🟢 Kamera Online</span>';
                 updateStatus('Siap merekam. Silakan scan resi.');
             }
+
 
             // Ensure placeholder is gone
             placeholder.classList.add('d-none');
@@ -789,51 +1204,63 @@
                     }, 100);
                 }
             }
+
+            checkReadyState(); // Update Ready Text
         };
 
         img.onerror = function () {
             // Only show error if connection actually failed (not just initial load)
             if (!connectionSucceeded) {
                 console.log(">>> [Preview] Image load error triggered");
-                showDisconnectUI();
+                // Use slight delay to prevent flicker if browser is just switching streams
+                setTimeout(showDisconnectUI, 500);
             }
         };
 
         // Use persistent video feed with cache buster
         img.src = `/video_feed?url=${encodeURIComponent(selectedCameraUrl)}&t=${new Date().getTime()}`;
 
-        // REMOVED: Health check interval that was causing camera to stay on
-        // Now relying on /cameras/status endpoint for status updates
-        // The video feed itself will fail if camera disconnects, triggering img.onerror
-
         // Timeout check: if still "Menghubungkan" after 10s
         setTimeout(() => {
             const indicator = document.getElementById('camera-status-indicator');
-            if (indicator.innerHTML.includes('Menghubungkan')) {
+            if (indicator && indicator.innerHTML.includes('Menghubungkan')) {
                 // Trigger error UI
+
+                // Explicitly HIDE overlay if it exists
+                const overlay = document.getElementById('rec-loading-overlay');
+                if (overlay) {
+                    overlay.style.display = 'none';
+                    overlay.style.setProperty('display', 'none', 'important');
+                }
+
                 const placeholder = document.getElementById('camera-placeholder');
                 const img = document.getElementById('camera-feed');
 
                 indicator.innerHTML = '<span class="text-danger">⚠️ Timeout. Gagal terhubung.</span>';
+                isConnecting = false; // Unlock on timeout
 
-                img.style.display = 'none';
-                img.classList.add('d-none');
+                if (img) {
+                    img.style.display = 'none';
+                    img.classList.add('d-none');
+                }
 
-                placeholder.classList.remove('d-none');
-                placeholder.classList.add('d-flex');
-                placeholder.style.display = 'flex';
+                if (placeholder) {
+                    placeholder.classList.remove('d-none');
+                    placeholder.classList.add('d-flex');
+                    placeholder.style.display = 'flex';
 
-                placeholder.innerHTML = `
-                    <i class="fs-1 mb-3 text-danger">⚠️</i>
-                    <h4 class="text-danger">Koneksi Timeout</h4>
-                    <p>Kamera tidak merespon dalam 10 detik.</p>
-                    <button class="btn btn-primary mt-2" onclick="startPreview()">🔄 Coba Lagi (Retry)</button>
-                `;
+                    placeholder.innerHTML = `
+                        <i class="fs-1 mb-3 text-danger">⚠️</i>
+                        <h4 class="text-danger">Koneksi Timeout</h4>
+                        <p>Kamera tidak merespon dalam 10 detik.</p>
+                        <div class="d-flex flex-column gap-2 mt-2">
+                             <button class="btn btn-primary" onclick="startPreview()">🔄 Coba Lagi (Retry)</button>
+                             <button class="btn btn-outline-secondary btn-sm" onclick="closeAllCameras()">❌ Tutup Semua</button>
+                        </div>
+                    `;
+                }
             }
         }, 10000);
-
-        // Start separate loop for barcode detection if needed
-        startBarcodeLoop();
     }
 
     function startBarcodeLoop() {
@@ -887,7 +1314,16 @@
             const isCameraVisible = imgEl && !imgEl.classList.contains('d-none') && (imgEl.style.display !== 'none');
 
             // 1. Basic checks
-            if (!selectedCameraUrl || inputMethod !== 'camera' || !selectedPlatform) {
+            if (!scanningCameraUrl || inputMethod !== 'camera') {
+                // If not in camera mode or no scanning camera selected, stop
+                barcodeLoopInterval = setTimeout(checkBarcode, 1000);
+                return;
+            }
+
+            // Only proceed if scanning camera is NOT local
+            if (scanningCameraUrl === 'local_client_device') return;
+
+            if (!selectedPlatform) {
                 isWaitingForResponse = false;
                 setScanVisual(false);
 
@@ -900,9 +1336,9 @@
                     zInd.style.display = 'none';
                 }
 
-                // Only show "Pilih Platform" if camera is VISIBLE (Online)
+                // Only show "Pilih Platform" if camera is VISIBLE (Online) AND NOT CONNECTING
                 // This prevents overwriting the disconnect error message
-                if (!selectedPlatform && inputMethod === 'camera' && selectedCameraUrl && isCameraVisible) {
+                if (!selectedPlatform && inputMethod === 'camera' && selectedCameraUrl && isCameraVisible && !isConnecting) {
                     if (indicator && !indicator.innerText.includes('Pilih Platform')) {
                         indicator.innerHTML = '<span class="text-warning">⚠️ Pilih Platform untuk mulai scan resi otomatis</span>';
                     }
@@ -958,9 +1394,9 @@
 
             isWaitingForResponse = true;
             lastRequestTime = now;
-            console.log(">>> [Loop] Emitting detect_barcode for URL:", selectedCameraUrl);
+            console.log(">>> [Loop] Emitting detect_barcode for URL:", scanningCameraUrl);
             setScanVisual(true);
-            currentSocket.emit('detect_barcode', { url: selectedCameraUrl });
+            currentSocket.emit('detect_barcode', { url: scanningCameraUrl });
 
             // Re-schedule based on SCAN_RATE
             barcodeLoopInterval = setTimeout(checkBarcode, SCAN_RATE);
@@ -1030,12 +1466,55 @@
     function setupPlatformSelect() {
         document.querySelectorAll('.platform-btn').forEach(btn => {
             btn.addEventListener('click', function () {
-                // BLOCK IF CAMERA OFFLINE
-                const img = document.getElementById('camera-feed');
-                const isOffline = !selectedCameraUrl || (img && img.classList.contains('d-none'));
+                // Check if currently connecting
+                if (isConnecting) {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Tunggu Sebentar',
+                        text: 'Kamera sedang menghubungkan... Harap tunggu hingga kamera online.',
+                        confirmButtonColor: '#ff6b35'
+                    });
+                    return;
+                }
 
-                if (isOffline) {
-                    alert('⚠️ Mohon koneksikan kamera terlebih dahulu!');
+                // 1. VALIDASI: Pastikan kamera connect sebelum pilih platform
+                // Gunakan checkReadyState untuk validasi ketat
+                const isReady = checkReadyState(true); // pass true to get boolean only? No, we check the global state or re-verify.
+                // Let's manually verify requirements here for the specific error message
+
+                const inputMethod = document.querySelector('input[name="input-method"]:checked').value;
+                const recActive = recordingCameraUrl && document.getElementById('camera-feed').src && !document.getElementById('camera-feed').classList.contains('d-none');
+
+                // For scanning, if mode is camera, we need it.
+                // NOTE: Local camera might not have a 'src' on backend-scan-feed, but uses html5-qrcode
+                let scanActive = false;
+                if (inputMethod === 'camera') {
+                    if (scanningCameraUrl === 'local_client_device') {
+                        scanActive = html5QrCode && html5QrCode.isScanning;
+                    } else if (scanningCameraUrl) {
+                        scanActive = document.getElementById('backend-scan-feed').src && !document.getElementById('backend-scan-area').classList.contains('d-none');
+                    }
+                } else {
+                    scanActive = true; // Ignore scan camera in manual/scanner mode
+                }
+
+                if (!recActive) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Kamera Belum Siap',
+                        text: 'Pastikan Kamera Perekam sudah dipilih dan Connected (Layar tampil).',
+                        confirmButtonColor: '#ff6b35'
+                    });
+                    return;
+                }
+
+                if (inputMethod === 'camera' && !scanActive) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Kamera Scan Belum Siap',
+                        text: 'Di mode "Deteksi Kamera", pastikan Kamera Scanner sudah dipilih dan Connected.',
+                        confirmButtonColor: '#ff6b35'
+                    });
                     return;
                 }
 
@@ -1066,6 +1545,8 @@
                 // Show Stop Scanning button
                 updateResetButtonVisibility();
 
+                checkReadyState(); // Update "Siap Merekam" text
+
                 // Mark usage as scan (baik deteksi kamera maupun metode input resi manual)
                 if (selectedCameraUrl) {
                     updateCameraUsage('scan');
@@ -1080,17 +1561,43 @@
 
         const handleInputMethodChange = () => {
             const selected = document.querySelector('input[name="input-method"]:checked');
-            const container = document.getElementById('scanner-container');
+            const scanRow = document.getElementById('scan-camera-row');
+
+            // Areas
+            const manualArea = document.getElementById('manual-input-area');
+            const localArea = document.getElementById('local-reader-area');
+            const backendArea = document.getElementById('backend-scan-area');
 
             if (selected && selected.value === 'scanner') {
-                container.classList.remove('d-none');
-                // Use a slight delay to ensure element is rendered
+                // MANUAL SCANNER MODE
+                // Show Scan Camera dropdown? No, hide it
+                if (scanRow) scanRow.style.display = 'none';
+
+                // Visible: Manual Input
+                if (manualArea) manualArea.classList.remove('d-none');
+
+                // Hidden: Camera feeds
+                if (localArea) localArea.classList.add('d-none');
+                if (backendArea) backendArea.classList.add('d-none');
+
+                // Focus
                 setTimeout(() => {
                     const input = document.getElementById('resi-input');
                     if (input) input.focus();
                 }, 50);
+
+                // Stop any automated scanning
+                stopScanning();
+
             } else {
-                container.classList.add('d-none');
+                // CAMERA SCAN/DETECT MODE
+                // Show Scan Camera dropdown
+                if (scanRow) scanRow.style.display = 'block';
+
+                // HIDE Manual Input (Users request)
+                if (manualArea) manualArea.classList.add('d-none');
+
+                // Note: We don't auto-show camera feeds here, we wait for "Connect" button
             }
 
             // Update button visibility based on method change
@@ -1103,6 +1610,7 @@
 
         // Initialize state on load
         handleInputMethodChange();
+        checkReadyState();
     }
 
     // 5. Scanner logic
@@ -1553,6 +2061,94 @@
                 }
             })
             .catch(err => console.log("[Cleanup] Check failed (server might be offline)", err));
+    }
+
+    // NEW: Centralized Ready State Check
+    function checkReadyState() {
+        const inputMethod = document.querySelector('input[name="input-method"]:checked')?.value;
+        const msgEl = document.getElementById('status-message');
+
+        // 1. Cek Recording Camera
+        const recImg = document.getElementById('camera-feed');
+        const recConnected = recordingCameraUrl && recImg && !recImg.classList.contains('d-none') && recImg.style.display !== 'none';
+
+        // 2. Cek Scanning Camera (Only if inputMethod == 'camera')
+        let scanConnected = true; // Default true for 'scanner' mode (manual)
+        if (inputMethod === 'camera') {
+            if (scanningCameraUrl === 'local_client_device') {
+                scanConnected = html5QrCode && html5QrCode.isScanning;
+            } else if (scanningCameraUrl) {
+                const scanImg = document.getElementById('backend-scan-feed');
+                scanConnected = scanImg && scanImg.src && !scanImg.parentElement.classList.contains('d-none');
+            } else {
+                scanConnected = false;
+            }
+        }
+
+        let headerStatus = "";
+        let isReady = false;
+
+        // Logic display
+        if (!inputMethod) return;
+
+        if (inputMethod === 'scanner') {
+            if (recConnected) {
+                // Ready
+                isReady = true;
+                headerStatus = "Siap merekam...";
+            } else {
+                headerStatus = "Hubungkan Kamera Perekam...";
+            }
+        } else {
+            // Camera detection mode
+            if (recConnected && scanConnected) {
+                isReady = true;
+                headerStatus = "Siap deteksi & rekam...";
+            } else {
+                if (!recConnected && !scanConnected) headerStatus = "Hubungkan kedua kamera...";
+                else if (!recConnected) headerStatus = "Hubungkan kamera rekam...";
+                else headerStatus = "Hubungkan kamera scan...";
+            }
+        }
+
+        // Update Text
+        if (!isRecording) { // Don't overwrite if recording
+            // Clean "ready" text if not connected
+            if (isReady && selectedPlatform) {
+                // Only show "Siap" if platform also selected?
+                // Request says: "teks siap merekam hanya dimunculin jika kedua kamera udah dipilih ... dan connect"
+                // It doesn't explicitly mention platform, but platform is usually the last step.
+                // Let's stick to camera readiness.
+                msgEl.textContent = headerStatus;
+                msgEl.classList.remove('text-muted');
+                msgEl.classList.add('text-success');
+            } else {
+                // If not ready, remove "Siap merekam" text (hide or show instruction)
+                msgEl.textContent = headerStatus;
+                msgEl.classList.remove('text-success');
+                msgEl.classList.add('text-muted');
+            }
+        }
+
+        // NEW: Update Scan Status Badge
+        const badge = document.getElementById('scan-status-badge');
+        if (badge) {
+            if (isReady && selectedPlatform) {
+                badge.classList.remove('d-none', 'bg-secondary', 'bg-warning');
+                badge.classList.add('bg-primary');
+                badge.textContent = 'Ready';
+            } else if (inputMethod === 'camera' && !scanConnected) {
+                // Camera selected but not connected
+                badge.classList.remove('d-none', 'bg-primary', 'bg-success');
+                badge.classList.add('bg-secondary');
+                badge.textContent = 'Off';
+            } else {
+                // Not ready for other reasons
+                badge.classList.add('d-none');
+            }
+        }
+
+        return isReady;
     }
 
     // Auto-cancel on page unload (Refresh, Close, Navigate Away)

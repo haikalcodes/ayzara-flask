@@ -183,56 +183,56 @@ class RecordingService:
             if os.path.exists(temp_path) and frames_written > 0:
                 print(f"[Recording] Converting to H.264 MP4: {output_path}")
                 
-                # FFmpeg command
+                # FFmpeg command with optimized compression and compatibility
+                # CRF 23 = Good quality/size balance
+                # preset medium = Balanced speed
+                # pix_fmt yuv420p = REQUIRED for browser playback
+                # scale filter = REQUIRED for H.264 (dimensions must be divisible by 2)
                 cmd = [
                     'ffmpeg', '-y',
                     '-i', temp_path,
+                    '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', # Force even dimensions
                     '-c:v', 'libx264',
-                    '-preset', 'medium',      
-                    '-crf', '23',             
-                    '-pix_fmt', 'yuv420p',    
-                    '-movflags', '+faststart', 
+                    '-preset', 'medium',
+                    '-crf', '23',
+                    '-pix_fmt', 'yuv420p',
+                    '-movflags', '+faststart',
                     output_path
                 ]
                 
+                print(f"[Recording] Running FFmpeg: {' '.join(cmd)}")
+
                 # Run FFmpeg
-                conversion_success = False
-                try:
-                    process = subprocess.run(
-                        cmd, 
-                        stdout=subprocess.PIPE, 
-                        stderr=subprocess.PIPE,
-                        timeout=60
-                    )
+                process = subprocess.run(
+                    cmd, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE,
+                    timeout=60  # 60 second timeout
+                )
+                
+                if process.returncode == 0:
+                    print(f"[Recording] ✅ Conversion SUCCESS!")
                     
-                    if process.returncode == 0:
-                        conversion_success = True
-                        print(f"[Recording] ✅ Conversion SUCCESS!")
-                        final_file_video = output_path
-                        # Remove temp file
-                        try:
-                            os.remove(temp_path)
-                        except:
-                            pass
+                    # Remove temp file
+                    try:
+                        os.remove(temp_path)
+                        print(f"[Recording] Temp file removed: {temp_path}")
+                    except Exception as e:
+                        print(f"[Recording] Warning: Could not remove temp file: {e}")
+                    
+                    # Verify final file
+                    if os.path.exists(output_path):
+                        file_size = os.path.getsize(output_path)
+                        print(f"[Recording] ✅ Final file ready: {output_path} ({file_size} bytes, {frames_written} frames)")
                     else:
-                        error_msg = process.stderr.decode('utf-8', errors='ignore')
-                        print(f"[Recording] ❌ FFmpeg conversion FAILED! Keeping raw AVI.")
-                        print(f"[Recording] Error: {error_msg[:500]}")
-                        
-                except Exception as e:
-                    print(f"[Recording] ❌ FFmpeg execution error: {e}")
-            
-            # FALLBACK: If conversion failed, use the AVI file
-            if not final_file_video and os.path.exists(temp_path) and frames_written > 0:
-                print(f"[Recording] ⚠️ Using fallback AVI file: {temp_path}")
-                final_file_video = temp_path
-            
-            # --- Update Database & Metadata with Result ---
-            # This logic mimics stop_recording but runs at thread end or we rely on stop_recording to update
-            # Since stop_recording updates DB based on rec_info['output_path'], we need validity check there.
-            
-            # NOTE: The actual DB update happens in stop_recording. 
-            # We just ensure the file exists on disk.
+                        print(f"[Recording] ❌ Final file missing after conversion!")
+                else:
+                    error_msg = process.stderr.decode('utf-8', errors='ignore')
+                    print(f"[Recording] ❌ FFmpeg conversion FAILED!")
+                    print(f"[Recording] Command: {' '.join(cmd)}")
+                    print(f"[Recording] Error Output:\n{error_msg}")
+            else:
+                print(f"[Recording] ❌ No frames recorded or temp file missing")
             
         except subprocess.TimeoutExpired:
             print(f"[Recording] ❌ FFmpeg conversion timeout. Keeping AVI.")
