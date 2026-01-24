@@ -19,21 +19,12 @@ if __name__ == '__main__':
     
     print(f"[Flask] Starting {config.APP_NAME} v{config.APP_VERSION}")
     print(f"[Flask] >>> REFACTORED MODULAR ARCHITECTURE <<<")
-    print(f"[Flask] Open https://192.168.43.94:5000 (SSL Enabled)")
+    print(f"[Flask] Open http://localhost:5000")
     
-    import os
-    base_dir = os.path.abspath(os.path.dirname(__file__))
-    cert = os.path.join(base_dir, '192.168.43.94+2.pem')
-    key = os.path.join(base_dir, '192.168.43.94+2-key.pem')
-    
-    print(f"[Flask] SSL Cert: {cert}")
-    print(f"[Flask] SSL Key: {key}")
-
-    # Use ssl_context for Werkzeug
+    # Use standard HTTP for development (or behind reverse proxy)
     socketio.run(app, 
                  host='0.0.0.0', 
                  port=5000, 
                  debug=True, 
-                 allow_unsafe_werkzeug=True,
-                 ssl_context=(cert, key))
+                 allow_unsafe_werkzeug=True)
 

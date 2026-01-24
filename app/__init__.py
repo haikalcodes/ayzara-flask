@@ -72,8 +72,11 @@ def create_app(config_object=config):
         return User.query.get(int(user_id))
     
     # Initialize SocketIO
-    print("[SocketIO] Initializing with threading mode...")
-    socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading', 
+    import os
+    mode = 'gevent' if os.environ.get('AYZARA_MODE') == 'production' else 'threading'
+    print(f"[SocketIO] Initializing with {mode} mode...")
+    
+    socketio = SocketIO(app, cors_allowed_origins="*", async_mode=mode, 
                        logger=False, engineio_logger=False)
     
     # Request logging
