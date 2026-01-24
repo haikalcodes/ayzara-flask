@@ -6,6 +6,10 @@ Configuration untuk AYZARA Dashboard Flask
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Base directories
 BASE_DIR = Path(__file__).parent.absolute()
@@ -31,7 +35,7 @@ STATIC_FOLDER = BASE_DIR / "static"
 CONFIG_FILE = BASE_DIR / "config.json"
 
 # Flask settings
-SECRET_KEY = os.environ.get('SECRET_KEY', 'ayzara-flask-secret-key-2026')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'change-me-in-production')
 DEBUG = True
 
 # Camera/RTSP settings (akan di-load dari config.json)
