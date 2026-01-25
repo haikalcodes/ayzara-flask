@@ -416,6 +416,7 @@
 <script>
     // Global variables
     let cameras = [];
+    let initialCheckDone = false; // Flag to track first load
 
     let cameraStatusInterval = null;
 
@@ -510,57 +511,102 @@
 
         // Initial status load once table is rendered
         refreshAllCameraStatuses();
-
-        // Note: Auto-refresh interval is managed by startStatusRefresh() / DOMContentLoaded
-        // We do NOT start another interval here to avoid double hits.
-
     }
 
 
-    // Refresh all camera statuses from cache (non-blocking)
+    // ===========================================
+    // SMART QUEUE / CONCURRENCY CONTROL
+    // ===========================================
+    // We limit concurrency to 2 to prevent USB/Driver collision,
+    // but still faster than sequential. We also implement RETRY logic.
+
+    let isCheckingStatus = false;
+
     function refreshAllCameraStatuses() {
         if (!cameras || cameras.length === 0) return;
+        if (isCheckingStatus) return; // Prevent double trigger
+        isCheckingStatus = true;
 
-        // ENABLE REFRESH=TRUE to force server-side active check
-        fetch('/api/cameras/status?refresh=true')
-            .then(response => response.json())
-            .then(data => {
-                // Backend returns 'cameras' array, not 'status' map
-                const statusList = data.cameras || [];
-                // Create map for easier lookup
-                const statusMap = {};
-                statusList.forEach(s => {
-                    statusMap[s.url] = s;
-                });
+        console.log('>>> [Status] Starting SMART QUEUE check (Concurrency: 2)...');
 
-                cameras.forEach((cam, idx) => {
-                    const badge = document.getElementById(`status-${idx}`);
-                    if (!badge) return;
+        // Create tasks with indices
+        const tasks = cameras.map((cam, index) => ({ cam, index }));
 
-                    // Don't overwrite if currently testing manual
-                    if (badge.innerHTML.includes('Mengetes')) return;
-
-                    const cameraStatus = statusMap[cam.url];
-
-                    if (cameraStatus) {
-                        if (cameraStatus.online) {
-                            badge.className = 'status-badge status-online';
-                            if (cameraStatus.in_use_by) {
-                                badge.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i> Online<br><small>Dipakai oleh ${escapeHtml(cameraStatus.in_use_by || 'Unknown')}</small>`;
-                            } else {
-                                badge.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Online';
-                            }
-                        } else {
-                            badge.className = 'status-badge status-offline';
-                            badge.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> Offline';
-                        }
-                    }
-                    // REMOVED: else { set "Waiting" } 
-                    // We keep previous state (which might be "Testing..." or last known state)
-                });
-            })
-            .catch(err => console.error(err));
+        // Execute with concurrency limit
+        processQueue(tasks, 2).finally(() => {
+            isCheckingStatus = false;
+            initialCheckDone = true; // Mark first check as done
+            console.log('>>> [Status] All checks completed. Background mode active.');
+        });
     }
+
+    // Queue Processor
+    async function processQueue(tasks, concurrency) {
+        const workers = new Array(concurrency).fill(Promise.resolve());
+
+        /* 
+           We map tasks to a chain. Each worker picks the next task 
+           from the iterator.
+        */
+        const iterator = tasks.entries(); // [index, task]
+
+        const worker = async () => {
+            for (const [_, task] of iterator) {
+                await checkCameraWithRetry(task.index, task.cam, false);
+            }
+        }
+
+        await Promise.all(workers.map(worker));
+    }
+
+    // Robust Check with Retry
+    async function checkCameraWithRetry(i, cam, forceFeedback = false) {
+        const badge = document.getElementById(`status-${i}`);
+        if (!badge) return;
+
+        // Set visual state ONLY if initialization or manual individual test
+        // (We suppress "Checking..." on background refreshes to avoid flicker)
+        if (!initialCheckDone || forceFeedback) {
+            badge.className = 'status-badge status-checking';
+            badge.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Mengecek...';
+        }
+
+        // Attepmt 1
+        let success = await performCheck(cam.url);
+
+        if (!success) {
+            // Wait 800ms and Retry ONCE (mimics user clicking again)
+            // This catches "Busy" states or driver initialization lag
+            console.log(`[Status] Camera ${i} failed first attempt. Retrying...`);
+            await new Promise(r => setTimeout(r, 800));
+            success = await performCheck(cam.url);
+        }
+
+        if (success) {
+            badge.className = 'status-badge status-online';
+            badge.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Online';
+        } else {
+            badge.className = 'status-badge status-offline';
+            badge.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> Offline';
+        }
+    }
+
+    // Single API Call wrapper
+    async function performCheck(url) {
+        try {
+            const response = await fetch('/api/cameras/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: url })
+            });
+            const data = await response.json();
+            return data.success;
+        } catch (err) {
+            console.error('Check error:', err);
+            return false;
+        }
+    }
+
 
     // Show add camera modal
     function showAddCameraModal() {
@@ -797,30 +843,7 @@
     // Test camera from table
     function testCamera(idx) {
         const cam = cameras[idx];
-        const badge = document.getElementById(`status-${idx}`);
-
-        badge.className = 'status-badge status-checking';
-        badge.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Mengetes...';
-
-        fetch('/api/cameras/test', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: cam.url })
-        })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    badge.className = 'status-badge status-online';
-                    badge.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Online';
-                } else {
-                    badge.className = 'status-badge status-offline';
-                    badge.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> Offline';
-                }
-            })
-            .catch(error => {
-                badge.className = 'status-badge status-offline';
-                badge.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i> Error';
-            });
+        checkCameraWithRetry(idx, cam, true); // True = Force User Feedback
     }
 
     // Delete camera

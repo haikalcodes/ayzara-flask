@@ -75,53 +75,112 @@ def api_cameras_status():
                 is_online = False
                 msg = "Offline"
                 
+                # IMPORT SERVICES
+                from app.services.camera_service import active_cameras, camera_lock
+                
+                # 1. FAST CHECK: Is it already streaming?
+                is_active_streaming = False
+                with camera_lock:
+                    if cam_url in active_cameras:
+                        cam_obj = active_cameras[cam_url]
+                        if cam_obj.running:
+                            is_online = True
+                            is_active_streaming = True
+                            msg = "Streaming"
+                
+                if is_active_streaming:
+                     # Skip hardware check if already streaming
+                     pass
+                
+                # 2. HARDWARE CHECK (If not streaming)
                 # Check Local
-                if str(cam_url).isdigit():
+                elif str(cam_url).isdigit():
                     idx = int(cam_url)
                     from app.services.camera_service import safe_hardware_lock
                     try:
-                        with safe_hardware_lock(idx, timeout=2.0) as acquired:
+                        # Allow more time for hardware to wake up (3.0s)
+                        # Some cheap USB cams are slow to initialize
+                        with safe_hardware_lock(idx, timeout=3.0) as acquired:
                             if not acquired:
                                 is_online = False
-                                msg = "Busy"
+                                msg = "Busy (Hardware Locked)"
                             else:
                                 import cv2
-                                cap = cv2.VideoCapture(idx)
+                                # Try DSHOW first
+                                cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
                                 if cap.isOpened():
+                                    time.sleep(0.2) # Give it a moment to sync
                                     ret, _ = cap.read()
+                                    if ret:
+                                        is_online = True
+                                        msg = "Ready (DSHOW)"
                                     cap.release()
-                                    is_online = ret
-                                    msg = "OK" if ret else "No frame"
+                                
+                                if not is_online:
+                                    # Fallback MSMF
+                                    cap = cv2.VideoCapture(idx, cv2.CAP_MSMF)
+                                    if cap.isOpened():
+                                        time.sleep(0.2)
+                                        ret, _ = cap.read()
+                                        if ret:
+                                            is_online = True
+                                            msg = "Ready (MSMF)"
+                                        cap.release()
                     except:
                         pass
-                # Check IP
+
+                # Check IP (Optimized: Socket Probe)
                 else:
-                    import cv2
-                    import os
-                    if 'rtsp' in str(cam_url):
-                        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+                    if str(cam_url).startswith('http'):
+                        # DroidCam or IP Webcam (HTTP)
+                        # Use simple HTTP HEAD request
+                        import urllib.request
+                        try:
+                            req = urllib.request.Request(cam_url, method='HEAD')
+                            with urllib.request.urlopen(req, timeout=3.0) as response:
+                                if response.status == 200:
+                                    is_online = True
+                                    msg = "OK (HTTP)"
+                        except:
+                            is_online = False
                     
-                    # Force FFmpeg backend for consistency
-                    cap = cv2.VideoCapture(cam_url, cv2.CAP_FFMPEG)
-                    
-                    if cap.isOpened():
-                        # Retry reading frames (sometimes first frame is empty/header)
-                        ret = False
-                        for _ in range(3):
-                            ret, _ = cap.read()
-                            if ret:
-                                break
-                            time.sleep(0.1)
+                    elif str(cam_url).startswith('rtsp'):
+                        # RTSP -> TCP Socket Connect (Port 554 or custom)
+                        try:
+                            # Parse host/port
+                            valid_rtsp = False
+                            host = None
+                            port = 554
                             
-                        cap.release()
-                        is_online = ret
-                        msg = "OK" if ret else "Stream opened but NO FRAME"
-                        print(f"[Status] IP Check {cam_url} -> Opened: True, GotFrame: {ret}")
+                            parts = cam_url.replace('rtsp://', '').split('/')
+                            host_port = parts[0].split(':')
+                            host = host_port[0]
+                            if len(host_port) > 1:
+                                port = int(host_port[1])
+                            
+                            # Socket Ping
+                            import socket
+                            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            s.settimeout(2.0)
+                            res = s.connect_ex((host, port))
+                            s.close()
+                            
+                            if res == 0:
+                                is_online = True
+                                msg = "OK (Socket)"
+                            else:
+                                msg = "Unreachable"
+                        except:
+                            msg = "Invalid URL"
                     else:
-                        is_online = False
-                        msg = "Failed to connect"
-                        print(f"[Status] IP Check {cam_url} -> Opened: False")
-                
+                         # Unknown format, dry run CV2 as last resort
+                         import cv2
+                         cap = cv2.VideoCapture(cam_url)
+                         if cap.isOpened():
+                             is_online = True
+                             msg = "OK (Slow)"
+                             cap.release()
+
                 # Update cache
                 with status_cache_lock:
                     current = camera_status_cache.get(cam_url, {})
@@ -148,9 +207,9 @@ def api_cameras_status():
                 t.start()
                 threads.append(t)
         
-        # Wait for threads (max 3 seconds total)
+        # Wait for threads (max 6 seconds total, giving slightly more time)
         for t in threads:
-            t.join(timeout=3.0)
+            t.join(timeout=6.0)
 
     with status_cache_lock:
         statuses = list(camera_status_cache.values())

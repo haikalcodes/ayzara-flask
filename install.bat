@@ -57,6 +57,18 @@ call venv\Scripts\activate.bat
 pip install -r requirements.txt
 
 echo.
+:: 5. [Optional] Check Ngrok (For Remote Dev)
+ngrok --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [INFO] Ngrok not found. Installing for Dev Access...
+    winget install Ngrok.Ngrok --accept-source-agreements --accept-package-agreements
+    echo [OK] Ngrok installed.
+    echo      Don't forget to run: ngrok config add-authtoken <YOUR_TOKEN>
+) else (
+    echo [OK] Ngrok found.
+)
+
+echo.
 echo ==================================================
 echo   INSTALLATION COMPLETE!
 echo.

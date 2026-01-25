@@ -48,6 +48,18 @@
       "name": "Local Camera 1",
       "url": "1",
       "enabled": true
+    },
+    {
+      "id": 3,
+      "name": "Local Camera 4",
+      "url": "4",
+      "enabled": true
+    },
+    {
+      "id": 4,
+      "name": "Local Camera 5",
+      "url": "5",
+      "enabled": true
     }
   ],
   "active_camera_index": 1,
