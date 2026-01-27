@@ -334,7 +334,7 @@ class RecordingService:
                     rec_info = active_recordings[recording_id]
                     del active_recordings[recording_id]
                 else:
-                    return False, "No active recording found"
+                    return False, "No active recording found", {}
             
             # Stop the thread
             if 'stop_event' in rec_info:
@@ -345,7 +345,7 @@ class RecordingService:
             # Get database record
             record = self.PackingRecord.query.get(rec_info['db_id'])
             if not record:
-                return False, "Recording not found in database"
+                return False, "Recording not found in database", {}
             
             # Update record
             record.waktu_selesai = datetime.now()

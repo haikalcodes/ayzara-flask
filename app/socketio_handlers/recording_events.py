@@ -63,7 +63,7 @@ def register_socketio_handlers(socketio):
         recording_id = data.get('recording_id')
         
         recording_service = RecordingService(db, PackingRecord)
-        success, message = recording_service.stop_recording(recording_id, save_video=True)
+        success, message, _ = recording_service.stop_recording(recording_id, save_video=True)
         
         # Emit result to requesting client
         emit('recording_stopped', {
@@ -81,7 +81,7 @@ def register_socketio_handlers(socketio):
         recording_id = data.get('recording_id')
         
         recording_service = RecordingService(db, PackingRecord)
-        success, message = recording_service.cancel_recording(recording_id)
+        success, message, _ = recording_service.cancel_recording(recording_id)
         
         # Emit result to requesting client
         emit('recording_cancelled', {
