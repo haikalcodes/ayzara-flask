@@ -41,8 +41,10 @@ def api_pegawai_get(pegawai_id):
 @login_required
 @admin_required
 def api_pegawai_create():
-    """Create new pegawai"""
+    """Create new pegawai and associated User account"""
     try:
+        from app.models import User
+        
         # Get form data
         nama = request.form.get('nama')
         jabatan = request.form.get('jabatan', '')
@@ -53,6 +55,10 @@ def api_pegawai_create():
         if not nama:
             return jsonify({'success': False, 'error': 'Nama harus diisi'}), 400
         
+        # NOTE: Phone is required now because it acts as password
+        if not telepon:
+            return jsonify({'success': False, 'error': 'Nomor Telepon wajib diisi (sebagai password)'}), 400
+
         # Handle photo upload
         photo_path = None
         if 'photo' in request.files:
@@ -65,7 +71,7 @@ def api_pegawai_create():
                 photo_path = os.path.join('photos', filename)
                 file.save(config.PHOTOS_FOLDER / filename)
         
-        # Create pegawai
+        # 1. Create Pegawai
         pegawai = Pegawai(
             nama=nama,
             jabatan=jabatan,
@@ -74,13 +80,36 @@ def api_pegawai_create():
             alamat=alamat,
             photo=photo_path
         )
-        
         db.session.add(pegawai)
+        db.session.flush() # Flush to get pegawai.id
+
+        # 2. Maintain User Sync - Create User
+        # Check if username exists, if so append random digits? 
+        # For simplicity, we assume uniqueness or fail. 
+        # Better: Strip spaces and lowercase for username.
+        raw_username = nama.strip()
+        
+        existing_user = User.query.filter_by(username=raw_username).first()
+        if existing_user:
+            # If name exists as user, maybe fail? or append?
+            # Let's fail for now to keep it clean, user can use "Naufal A"
+            db.session.rollback()
+            return jsonify({'success': False, 'error': f'Username "{raw_username}" sudah digunakan. Gunakan nama lain.'}), 400
+
+        new_user = User(
+            username=raw_username,
+            role='pegawai',
+            pegawai_id=pegawai.id
+        )
+        new_user.set_password(telepon) # Set password to phone number
+        db.session.add(new_user)
+        
         db.session.commit()
         
         return jsonify({
             'success': True,
-            'pegawai': pegawai.to_dict()
+            'pegawai': pegawai.to_dict(),
+            'message': 'Pegawai dan akun login berhasil dibuat'
         })
         
     except Exception as e:
@@ -92,11 +121,15 @@ def api_pegawai_create():
 @login_required
 @admin_required
 def api_pegawai_update(pegawai_id):
-    """Update existing pegawai"""
+    """Update existing pegawai and sync User account"""
     try:
+        from app.models import User
         pegawai = Pegawai.query.get_or_404(pegawai_id)
         
         # Update fields
+        old_nama = pegawai.nama
+        old_telepon = pegawai.telepon
+        
         if 'nama' in request.form:
             pegawai.nama = request.form.get('nama')
         if 'jabatan' in request.form:
@@ -133,11 +166,30 @@ def api_pegawai_update(pegawai_id):
                 # Update photo path
                 pegawai.photo = photo_path
         
+        # Maintain User Sync
+        user = User.query.filter_by(pegawai_id=pegawai.id).first()
+        if user:
+            # Sync Username if name changed
+            if pegawai.nama != old_nama:
+                # Check for duplicate
+                existing = User.query.filter_by(username=pegawai.nama).first()
+                if existing and existing.id != user.id:
+                     db.session.rollback()
+                     return jsonify({'success': False, 'error': f'Nama "{pegawai.nama}" sudah digunakan user lain.'}), 400
+                user.username = pegawai.nama
+            
+            # Sync Password if phone changed (OPTIONAL: Maybe only if explicitly requested?)
+            # User said: "nomor telepon jadi password"
+            # It's safer to always sync them to keep the rule valid.
+            if pegawai.telepon != old_telepon and pegawai.telepon:
+                user.set_password(pegawai.telepon)
+
         db.session.commit()
         
         return jsonify({
             'success': True,
-            'pegawai': pegawai.to_dict()
+            'pegawai': pegawai.to_dict(),
+            'message': 'Data pegawai diperbarui'
         })
         
     except Exception as e:
@@ -172,11 +224,17 @@ def api_pegawai_toggle_status(pegawai_id):
 @login_required
 @admin_required
 def api_pegawai_delete(pegawai_id):
-    """Delete pegawai PERMANENTLY"""
+    """Delete pegawai PERMANENTLY and their User account"""
     try:
+        from app.models import User
         pegawai = Pegawai.query.get_or_404(pegawai_id)
         
-        # Delete photo file if exists
+        # 1. Delete associated User first
+        user = User.query.filter_by(pegawai_id=pegawai.id).first()
+        if user:
+            db.session.delete(user)
+
+        # 2. Delete photo file if exists
         if pegawai.photo:
             try:
                 filename = os.path.basename(pegawai.photo)
@@ -187,7 +245,7 @@ def api_pegawai_delete(pegawai_id):
             except Exception as e:
                 print(f"[Pegawai] Failed to delete photo: {e}")
 
-        # Hard delete from DB
+        # 3. Hard delete from DB
         db.session.delete(pegawai)
         db.session.commit()
         

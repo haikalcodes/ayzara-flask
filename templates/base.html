@@ -70,13 +70,13 @@
         </div>
 
         <div class="sidebar-menu">
-            {% if current_user.is_admin() %}
             <a href="{{ url_for('main.index') }}"
                 class="menu-item {% if request.endpoint == 'main.index' %}active{% endif %}">
                 <i class="bi bi-grid-1x2"></i>
                 <span>Dashboard</span>
             </a>
 
+            {% if current_user.is_admin() %}
             <a href="{{ url_for('main.monitoring') }}"
                 class="menu-item {% if request.endpoint == 'monitoring' %}active{% endif %}">
                 <i class="bi bi-broadcast"></i>
