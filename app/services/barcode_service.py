@@ -27,15 +27,51 @@ class BarcodeService:
             return None
         
         try:
-            # Decode barcodes from frame
+            # OPTIMIZATION: Resize large frames to speed up processing
+            # Max width 800px maintains readability while reducing CPU load
+            height, width = frame.shape[:2]
+            if width > 800:
+                scale = 800 / width
+                frame = cv2.resize(frame, (800, int(height * scale)))
+
+            # STRATEGY 1: Detect on Original Frame (Fastest)
             barcodes = decode(frame)
-            
             if barcodes:
-                # Return the first detected barcode
-                barcode_data = barcodes[0].data.decode('utf-8')
-                return barcode_data
+                print("[Barcode] ✅ FOUND in Stage 1 (Original)")
+                return barcodes[0].data.decode('utf-8')
+
+            # --- OPTIMIZATION PIPELINE ---
             
-            return None
+            # 1. Convert to Grayscale
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            
+            # STRATEGY 2: Detect on Grayscale
+            barcodes = decode(gray)
+            if barcodes:
+                print("[Barcode] ✅ FOUND in Stage 2 (Grayscale)")
+                return barcodes[0].data.decode('utf-8')
+
+            # 2. Enhance Contrast (Alpha=1.5, Beta=10)
+            enhanced_gray = cv2.convertScaleAbs(gray, alpha=1.5, beta=10)
+            
+            # STRATEGY 3: Detect on Enhanced Grayscale
+            barcodes = decode(enhanced_gray)
+            if barcodes:
+                 print("[Barcode] ✅ FOUND in Stage 3 (Enhanced Contrast)")
+                 return barcodes[0].data.decode('utf-8')
+
+            # 3. Thresholding (Otsu's Binarization) - High Contrast B&W
+            _, thresh = cv2.threshold(enhanced_gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            
+            # STRATEGY 4: Detect on Thresholded Image (Best for tough lighting)
+            barcodes = decode(thresh)
+            if barcodes:
+                print("[Barcode] ✅ FOUND in Stage 4 (Threshold)")
+                return barcodes[0].data.decode('utf-8')
+            
+            # If we reach here, all stages failed
+            pass
+            
         except Exception as e:
             print(f"[Barcode] Error detecting barcode: {e}")
             return None

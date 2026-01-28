@@ -30,19 +30,20 @@ class StatsService:
         """
         today = datetime.now().date()
         
+        # Count UNIQUE resi (packages), not total records
         total = self.PackingRecord.query.filter(
             self.db.func.date(self.PackingRecord.waktu_mulai) == today
-        ).count()
+        ).with_entities(self.PackingRecord.resi).distinct().count()
         
         completed = self.PackingRecord.query.filter(
             self.db.func.date(self.PackingRecord.waktu_mulai) == today,
             self.PackingRecord.status == 'COMPLETED'
-        ).count()
+        ).with_entities(self.PackingRecord.resi).distinct().count()
         
         errors = self.PackingRecord.query.filter(
             self.db.func.date(self.PackingRecord.waktu_mulai) == today,
             self.PackingRecord.status == 'ERROR'
-        ).count()
+        ).with_entities(self.PackingRecord.resi).distinct().count()
         
         # Average duration
         avg_result = self.db.session.query(
@@ -81,9 +82,10 @@ class StatsService:
         weekly_data = []
         for i in range(7):
             date = datetime.now().date() - timedelta(days=i)
+            # Count unique resi per day
             count = self.PackingRecord.query.filter(
                 self.db.func.date(self.PackingRecord.waktu_mulai) == date
-            ).count()
+            ).with_entities(self.PackingRecord.resi).distinct().count()
             weekly_data.append({
                 'date': date.strftime('%Y-%m-%d'),
                 'day': date.strftime('%a'),
@@ -104,10 +106,11 @@ class StatsService:
         """
         platform_data = []
         for platform in platforms.keys():
+            # Count unique resi per platform
             count = self.PackingRecord.query.filter_by(
                 platform=platform,
                 status='COMPLETED'
-            ).count()
+            ).with_entities(self.PackingRecord.resi).distinct().count()
             platform_data.append({
                 'platform': platform,
                 'count': count,
@@ -125,9 +128,10 @@ class StatsService:
         Returns:
             List of tuples (pegawai_name, count)
         """
+        # Count unique resi per pegawai (not total records)
         leaderboard = self.db.session.query(
             self.PackingRecord.pegawai,
-            self.db.func.count(self.PackingRecord.id).label('count')
+            self.db.func.count(self.db.distinct(self.PackingRecord.resi)).label('count')
         ).filter_by(status='COMPLETED').group_by(
             self.PackingRecord.pegawai
         ).order_by(self.db.text('count DESC')).limit(limit).all()

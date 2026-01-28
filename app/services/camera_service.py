@@ -84,13 +84,69 @@ class VideoCamera:
         # Set properties
         if self.cap.isOpened():
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            # Use HD resolution (1280x720) for better barcode detection details
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
             self.cap.set(cv2.CAP_PROP_FPS, 30)
+            
+            # CRITICAL: Validate that camera produces valid frames
+            # For local cameras, isOpened() can be True but frames are garbage
+            print(f"[Camera] Validating {url}...")
+            valid_frame_found = False
+            prev_frame = None
+            
+            for attempt in range(10):  # Try 10 times over 1 second
+                ret, test_frame = self.cap.read()
+                
+                if ret and test_frame is not None and test_frame.size > 0:
+                    # Check 1: Frame has reasonable dimensions
+                    h, w = test_frame.shape[:2]
+                    if h < 10 or w < 10:
+                        print(f"[Camera] {url} frame too small: {w}x{h}")
+                        time.sleep(0.1)
+                        continue
+                    
+                    # Check 2: Frame is not completely black or white
+                    mean_val = test_frame.mean()
+                    if mean_val < 5 or mean_val > 250:
+                        print(f"[Camera] {url} frame is blank (mean={mean_val:.1f})")
+                        time.sleep(0.1)
+                        continue
+                    
+                    # Check 3: Compare with previous frame (real cameras have changes)
+                    if prev_frame is not None:
+                        # Calculate difference between frames
+                        diff = cv2.absdiff(test_frame, prev_frame)
+                        diff_mean = diff.mean()
+                        
+                        # Real camera should have SOME difference (even if static scene, there's noise/compression)
+                        # But not TOO much (pure random noise has huge differences)
+                        if 0.5 < diff_mean < 100:  # Sweet spot for real video
+                            valid_frame_found = True
+                            print(f"[Camera] {url} validation SUCCESS (diff={diff_mean:.2f})")
+                            break
+                    
+                    prev_frame = test_frame.copy()
+                
+                time.sleep(0.1)
+            
+            if not valid_frame_found:
+                print(f"[Camera] {url} validation FAILED - no valid frames")
+                self.cap.release()
+                self.cap = None
+                self.running = False
+                # Emit socket error
+                try:
+                    from app import socketio
+                    if socketio:
+                        socketio.emit('camera_error', {'url': str(url), 'error': 'Camera not producing valid frames'})
+                except:
+                    pass
         
-        # Start update thread
-        self.thread = threading.Thread(target=self.update, daemon=True)
-        self.thread.start()
+        # Start update thread only if cap is valid
+        if self.cap:
+            self.thread = threading.Thread(target=self.update, daemon=True)
+            self.thread.start()
     
     def __del__(self):
         self.stop()
@@ -110,22 +166,26 @@ class VideoCamera:
     
     def update(self):
         """Background thread to continuously read frames"""
+        # Local import to avoid circular dependency
+        from app import socketio
+        
+        # Rate limit error reporting
+        last_error_emit = 0
+        
         while self.running:
             if self.cap and self.cap.isOpened():
                 ret, frame = self.cap.read()
                 
                 if ret:
                     # Apply zoom if needed
+                    # (Zoom logic omitted for brevity, keeping existing if possible or re-inserting)
                     if self.zoom_level > 1.0:
                         h, w = frame.shape[:2]
-                        # Calculate crop dimensions
                         crop_w = int(w / self.zoom_level)
                         crop_h = int(h / self.zoom_level)
-                        # Center crop
                         x = (w - crop_w) // 2
                         y = (h - crop_h) // 2
                         cropped = frame[y:y+crop_h, x:x+crop_w]
-                        # Resize back to original size
                         frame = cv2.resize(cropped, (w, h))
                     
                     with self.lock:
@@ -134,6 +194,28 @@ class VideoCamera:
                         self.consecutive_errors = 0
                 else:
                     self.consecutive_errors += 1
+                    # If we have consecutive errors for > 1 second (approx 10 frames at 0.1s sleep)
+                    # We should notify frontend immediately
+                    if self.consecutive_errors > 5 and (time.time() - last_error_emit > 5.0):
+                        print(f"[{self.url}] Critical camera error: {self.consecutive_errors} failures")
+                        try:
+                            if socketio:
+                                socketio.emit('camera_error', {'url': self.url, 'error': 'Connection lost'})
+                                last_error_emit = time.time()
+                        except Exception as e:
+                            print(f"Socket emit failed: {e}")
+                    
+                    # CRITICAL: Auto-shutdown if too many errors (prevent spam)
+                    if self.consecutive_errors > 50:  # ~5 seconds of continuous failure
+                        print(f"[{self.url}] Too many errors ({self.consecutive_errors}), shutting down camera thread")
+                        self.running = False
+                        try:
+                            if socketio:
+                                socketio.emit('camera_error', {'url': self.url, 'error': 'Camera disconnected'})
+                        except:
+                            pass
+                        break  # Exit the while loop
+                            
                     time.sleep(0.1)
             else:
                 time.sleep(0.5)
@@ -174,16 +256,32 @@ def get_camera_stream(url):
         if url in active_cameras:
             cam = active_cameras[url]
             # Check if camera is still healthy
-            if cam.running and (time.time() - cam.last_update < 5.0):
-                return cam
-            else:
-                # Camera is dead, remove it
+            # Also check if cap is None (validation failed)
+            if cam.cap is None or not cam.running or (time.time() - cam.last_update >= 5.0):
+                # Camera is dead or invalid, remove it
+                print(f"[Camera] Removing dead/invalid camera {url} from active_cameras")
                 cam.stop()
                 del active_cameras[url]
+            else:
+                return cam
         
         # Create new camera
         try:
             cam = VideoCamera(url)
+            
+            # CRITICAL: Check if camera is actually valid
+            # If validation failed in __init__, cap will be None
+            if cam.cap is None:
+                print(f"[Camera] {url} failed validation, not adding to active cameras")
+                return None
+            
+            # Wait a moment for first frame
+            time.sleep(0.5)
+            if cam.last_frame is None:
+                print(f"[Camera] {url} no frames after 0.5s, rejecting")
+                cam.stop()
+                return None
+            
             active_cameras[url] = cam
             return cam
         except Exception as e:
@@ -191,16 +289,47 @@ def get_camera_stream(url):
             return None
 
 
-def gen_frames(camera):
+def gen_frames(camera, processing_mode=None):
     """Generator function for video streaming"""
     while True:
-        frame = camera.get_frame()
-        if frame is None:
-            time.sleep(0.1)
-            continue
-        
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+        if processing_mode == 'scan':
+            # Get RAW frame to apply processing visualization
+            frame = camera.get_raw_frame()
+            if frame is None:
+                time.sleep(0.1)
+                continue
+                
+            try:
+                # REPLICATE BARCODE SERVICE PREPROCESSING PIPELINE
+                # 1. Grayscale
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                
+                # 2. Enhance Contrast
+                enhanced = cv2.convertScaleAbs(gray, alpha=1.5, beta=10)
+                
+                # 3. Threshold (Visualized as the "Final" stage logic)
+                _, thresh = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                
+                # Encode the THRESHOLDED frame
+                ret, jpeg = cv2.imencode('.jpg', thresh, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                if ret:
+                    frame_bytes = jpeg.tobytes()
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+            except Exception as e:
+                # Fallback to normal frame on error
+                print(f"Processing error: {e}")
+                pass
+                
+        else:
+            # Standard Stream (Color)
+            frame = camera.get_frame()
+            if frame is None:
+                time.sleep(0.1)
+                continue
+            
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
 
 # ============================================

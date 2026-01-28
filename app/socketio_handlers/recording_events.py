@@ -120,7 +120,7 @@ def register_socketio_handlers(socketio):
             barcode = BarcodeService.detect_barcode_from_frame(frame)
             
             # DEBUG: Visibility for user
-            print(f"[SocketIO] Scanning... Found: {barcode if barcode else 'NO'}")
+            # print(f"[SocketIO] Scanning... Found: {barcode if barcode else 'NO'}")
             
             # DEBUG: Save frame to check quality (overwrite)
             try:

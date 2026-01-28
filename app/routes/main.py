@@ -58,8 +58,10 @@ def index():
             PackingRecord.pegawai == username  # Assuming username matches pegawai name
         )
         
-        total = base_query.count()
-        completed = base_query.filter_by(status='COMPLETED').count()
+        
+        # Count UNIQUE resi (packages), not total records
+        total = base_query.with_entities(PackingRecord.resi).distinct().count()
+        completed = base_query.filter_by(status='COMPLETED').with_entities(PackingRecord.resi).distinct().count()
         
         # Avg Duration
         completed_records = base_query.filter_by(status='COMPLETED').all()
@@ -193,10 +195,11 @@ def team():
     # Stats per pegawai
     pegawai_stats = {}
     for p in pegawai_list:
+        # Count unique resi per pegawai
         count = PackingRecord.query.filter_by(
             pegawai=p.nama,
             status='COMPLETED'
-        ).count()
+        ).with_entities(PackingRecord.resi).distinct().count()
         pegawai_stats[p.id] = count
     
     return render_template('pages/team.html',

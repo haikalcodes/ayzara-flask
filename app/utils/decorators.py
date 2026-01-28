@@ -23,7 +23,7 @@ def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not current_user.is_authenticated or not current_user.is_admin():
-            flash('Akses ditolak. Hanya admin yang dapat mengakses halaman ini.', 'danger')
-            return redirect(url_for('main.videos'))  # Redirect to videos instead of index
+            # flash('Akses ditolak. Hanya admin yang dapat mengakses halaman ini.', 'danger')
+            return redirect(url_for('main.index')) 
         return f(*args, **kwargs)
     return decorated_function

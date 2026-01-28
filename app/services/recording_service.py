@@ -154,8 +154,8 @@ class RecordingService:
                         out.write(frame)
                         last_ts = current_ts
                         frames_written += 1
-                        if frames_written % 30 == 0:
-                            print(f"[Recording] {recording_id}: Written {frames_written} frames")
+                        # if frames_written % 30 == 0:
+                        #     print(f"[Recording] {recording_id}: Written {frames_written} frames")
                         time.sleep(1.0/fps)
                     else:
                         time.sleep(0.01)
