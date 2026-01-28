@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard Pegawai - AYZARA{% endblock %}
+{% block page_title %}Dashboard Saya{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card bg-glass border-0">
+            <div class="card-body d-flex align-items-center justify-content-between p-4">
+                <div>
+                    <h2 class="fw-bold mb-1">Halo, {{ current_user.username }}! 👋</h2>
+                    <p class="text-muted mb-0">{{ current_time }}</p>
+                </div>
+                <div class="d-none d-md-block">
+                    <span class="badge bg-primary fs-6 px-3 py-2 rounded-pill">Pegawai Packing</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Stats for specific user -->
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-icon"><i class="bi bi-box-seam"></i></div>
+            <div class="stat-value">{{ user_stats.total }}</div>
+            <div class="stat-label">Paket Dipacking Hari Ini</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card info">
+            <div class="stat-icon"><i class="bi bi-clock-history"></i></div>
+            <div class="stat-value">{{ user_stats.avg_duration }}s</div>
+            <div class="stat-label">Rata-rata Kecepatan</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card success">
+            <div class="stat-icon"><i class="bi bi-check-circle"></i></div>
+            <div class="stat-value">{{ user_stats.completed }}</div>
+            <div class="stat-label">Rekaman Sukses</div>
+        </div>
+    </div>
+</div>
+
+<!-- All Time Stats -->
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <h6 class="text-muted text-uppercase fw-semibold mb-2 ms-1" style="font-size: 0.75rem; letter-spacing: 1px;">
+            Statistik Keseluruhan</h6>
+    </div>
+    <div class="col-md-6">
+        <div class="stat-card"
+            style="background: linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);">
+            <div class="stat-icon text-primary"><i class="bi bi-box-seam-fill"></i></div>
+            <div class="stat-value">{{ user_stats.total_packages_all_time }}</div>
+            <div class="stat-label">Total Paket (Unik Resi)</div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="stat-card"
+            style="background: linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);">
+            <div class="stat-icon text-info"><i class="bi bi-camera-reels-fill"></i></div>
+            <div class="stat-value">{{ user_stats.total_recordings_all_time }}</div>
+            <div class="stat-label">Total Kali Rekam</div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Action Button -->
+<div class="row mb-5">
+    <div class="col-12">
+        <a href="{{ url_for('recording.rekam_packing') }}"
+            class="btn btn-lg btn-primary w-100 py-4 d-flex align-items-center justify-content-center gap-3 shadow-lg"
+            style="border-radius: 16px; transition: transform 0.2s;">
+            <i class="bi bi-camera-video-fill" style="font-size: 2rem;"></i>
+            <span class="fs-3 fw-bold">MULAI REKAM BARU</span>
+        </a>
+    </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="row">
+    <div class="col-12">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center py-3">
+                <h5 class="card-title mb-0"><i class="bi bi-activity me-2"></i>Aktivitas Terakhir Anda</h5>
+                <a href="{{ url_for('main.videos') }}" class="btn btn-sm btn-glass">Lihat Riwayat</a>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead style="background-color: rgba(255,255,255,0.05); color: #8898aa;">
+                        <tr>
+                            <th class="ps-4">Waktu</th>
+                            <th>Resi</th>
+                            <th>Platform</th>
+                            <th>Durasi</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if recent_recordings %}
+                        {% for rec in recent_recordings %}
+                        <tr>
+                            <td class="ps-4 text-muted small">{{ rec.waktu_mulai }}</td>
+                            <td class="fw-bold text-primary">{{ rec.resi }}</td>
+                            <td>
+                                <span class="badge badge-platform">{{ rec.platform }}</span>
+                            </td>
+                            <td>{{ rec.durasi_detik }} detik</td>
+                            <td>
+                                {% if rec.status == 'COMPLETED' %}
+                                <span class="badge badge-status-completed">Selesai</span>
+                                {% elif rec.status == 'RECORDING' %}
+                                <span class="badge badge-status-recording">Merekam</span>
+                                {% else %}
+                                <span class="badge badge-status-error">Error</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox fs-1 d-block mb-3 opacity-50"></i>
+                                Belum ada aktivitas hari ini. Yuk mulai rekam!
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .stat-card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-primary:hover {
+        transform: scale(1.02);
+    }
+</style>
+{% endblock %}

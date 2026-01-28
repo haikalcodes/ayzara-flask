@@ -22,7 +22,11 @@ if exist "venv\Scripts\activate.bat" (
 echo.
 echo [INFO] Starting Application...
 echo [INFO] Please leave this window OPEN to keep server running.
+echo [INFO] Browser will open automatically in 3 seconds...
 echo.
+
+:: Auto-open browser in 3 seconds (minimized window)
+start /min cmd /c "timeout /t 3 >nul && start http://localhost:5000"
 
 :: Run the production script
 python run_prod.py

@@ -28,17 +28,32 @@ env/
 .env
 .venv
 
-# Flask
+# Flask & Database
 instance/
 .webassets-cache
-
-# Project Specific
-recordings/
-recordings
-uploads/
-*.log
 *.db
+*.sqlite
 *.sqlite3
+packing_records.db
+
+# Project Specific Data (Fresh Start)
+recordings/
+uploads/
+photos/
+thumbnails/
+static/uploads/
+config.json
+
+# SSL & Security
+ssl/
+*.pem
+*.key
+*.crt
+
+# Logs & Debug
+*.log
+last_scan_debug.jpg
+capture_*.jpg
 
 # IDE
 .vscode/
@@ -49,3 +64,23 @@ uploads/
 # OS
 .DS_Store
 Thumbs.db
+Desktop.ini
+
+# Installers & Binaries (Keep repo light)
+*.exe
+*.msi
+*.bin
+*.dll
+python-*.exe
+vcredist_*.exe
+
+# Local Development & Debug
+log.txt
+server_fixed.txt
+last_scan_debug.jpg
+capture_*.jpg
+
+# Asset Download Scripts (Optional to ignore, but good if you want repo clean)
+# download_assets.bat
+# download_fonts.bat
+

@@ -155,8 +155,8 @@ class RecordingService:
                         out.write(frame)
                         last_ts = current_ts
                         frames_written += 1
-                        if frames_written % 30 == 0:
-                            print(f"[Recording] {recording_id}: Written {frames_written} frames")
+                        # if frames_written % 30 == 0:
+                        #     print(f"[Recording] {recording_id}: Written {frames_written} frames")
                         time.sleep(1.0/fps)
                     else:
                         time.sleep(0.01)
@@ -316,7 +316,7 @@ class RecordingService:
                     rec_info = active_recordings[recording_id]
                     del active_recordings[recording_id]
                 else:
-                    return False, "No active recording found"
+                    return False, "No active recording found", {}
             
             # Stop the thread
             if 'stop_event' in rec_info:
@@ -327,7 +327,7 @@ class RecordingService:
             # Get database record
             record = self.PackingRecord.query.get(rec_info['db_id'])
             if not record:
-                return False, "Recording not found in database"
+                return False, "Recording not found in database", {}
             
             # Update record
             record.waktu_selesai = datetime.now()

@@ -444,7 +444,8 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<script src="{{ url_for('static', filename='vendor/html5-qrcode/html5-qrcode.min.js') }}"
+    type="text/javascript"></script>
 <script>
     // Barcode Search Variables
     let searchCameraUrl = '';

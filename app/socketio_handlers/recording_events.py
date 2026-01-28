@@ -63,7 +63,7 @@ def register_socketio_handlers(socketio):
         recording_id = data.get('recording_id')
         
         recording_service = RecordingService(db, PackingRecord)
-        success, message = recording_service.stop_recording(recording_id, save_video=True)
+        success, message, _ = recording_service.stop_recording(recording_id, save_video=True)
         
         # Emit result to requesting client
         emit('recording_stopped', {
@@ -81,7 +81,7 @@ def register_socketio_handlers(socketio):
         recording_id = data.get('recording_id')
         
         recording_service = RecordingService(db, PackingRecord)
-        success, message = recording_service.cancel_recording(recording_id)
+        success, message, _ = recording_service.cancel_recording(recording_id)
         
         # Emit result to requesting client
         emit('recording_cancelled', {
@@ -120,6 +120,15 @@ def register_socketio_handlers(socketio):
             barcode = BarcodeService.detect_barcode_from_frame(frame)
             
             # DEBUG: Visibility for user
+            # print(f"[SocketIO] Scanning... Found: {barcode if barcode else 'NO'}")
+            
+            # DEBUG: Save frame to check quality (overwrite)
+            try:
+                import cv2
+                cv2.imwrite('last_scan_debug.jpg', frame)
+            except:
+                pass
+
             if barcode:
                 print(f"[SocketIO] ✅ BARCODE FOUND: {barcode}")
                 emit('barcode_result', {

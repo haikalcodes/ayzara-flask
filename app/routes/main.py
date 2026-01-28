@@ -18,26 +18,104 @@ main_bp = Blueprint('main', __name__)
 
 @main_bp.route('/')
 @login_required
-@admin_required
 def index():
     """Homepage - Dashboard overview"""
     stats_service = StatsService(db, PackingRecord)
-    stats = stats_service.get_today_stats()
     
-    # Get active recording
-    active = None  # TODO: Implement with RecordingService
+    # --- ADMIN DASHBOARD ---
+    if current_user.role == 'admin':
+        stats = stats_service.get_today_stats()
+        
+        # Get active recording
+        active = None  # TODO: Implement with RecordingService
+        
+        # Recent recordings (Global)
+        recent = PackingRecord.query.order_by(
+            PackingRecord.waktu_mulai.desc()
+        ).limit(10).all()
+        
+        return render_template('pages/dashboard.html',
+            stats=stats,
+            active_recording=active,
+            recent_recordings=[r.to_dict() for r in recent],
+            platforms=config.PLATFORMS
+        )
     
-    # Recent recordings
-    recent = PackingRecord.query.order_by(
-        PackingRecord.waktu_mulai.desc()
-    ).limit(10).all()
-    
-    return render_template('pages/dashboard.html',
-        stats=stats,
-        active_recording=active,
-        recent_recordings=[r.to_dict() for r in recent],
-        platforms=config.PLATFORMS
-    )
+    # --- EMPLOYEE DASHBOARD ---
+    else:
+        # Get stats specific to this user/pegawai
+        # Need to implement logic to filter stats by pegawai name
+        username = current_user.username
+        
+        # Get today's stats for this user
+        # Note: We need to filter manually or extend StatsService. 
+        # For simplicity, let's query directly here for now.
+        from datetime import datetime
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        base_query = PackingRecord.query.filter(
+            PackingRecord.waktu_mulai >= today_start,
+            PackingRecord.pegawai == username  # Assuming username matches pegawai name
+        )
+        
+        
+        # Count UNIQUE resi (packages), not total records
+        total = base_query.with_entities(PackingRecord.resi).distinct().count()
+        completed = base_query.filter_by(status='COMPLETED').with_entities(PackingRecord.resi).distinct().count()
+        
+        # Avg Duration
+        completed_records = base_query.filter_by(status='COMPLETED').all()
+        total_duration = sum(r.durasi_detik or 0 for r in completed_records)
+        avg_duration = round(total_duration / len(completed_records)) if completed_records else 0
+        
+        # All Time Stats
+        total_recordings_all_time = PackingRecord.query.filter_by(
+            pegawai=username,
+            status='COMPLETED'
+        ).count()
+        
+        # Unique Resi (Packages)
+        # Using distinct count on resi
+        total_packages_all_time = PackingRecord.query.with_entities(
+            PackingRecord.resi
+        ).filter_by(
+            pegawai=username,
+            status='COMPLETED'
+        ).distinct().count()
+
+        user_stats = {
+            'total': total,
+            'completed': completed,
+            'avg_duration': avg_duration,
+            'total_recordings_all_time': total_recordings_all_time,
+            'total_packages_all_time': total_packages_all_time
+        }
+        
+        # Recent recordings (Personal)
+        recent = PackingRecord.query.filter_by(pegawai=username).order_by(
+            PackingRecord.waktu_mulai.desc()
+        ).limit(5).all()
+        
+        # Custom Date Formatter for Indonesian
+        now = datetime.now()
+        days_id = {'Monday': 'Senin', 'Tuesday': 'Selasa', 'Wednesday': 'Rabu', 'Thursday': 'Kamis', 'Friday': 'Jumat', 'Saturday': 'Sabtu', 'Sunday': 'Minggu'}
+        months_id = {'January': 'Januari', 'February': 'Februari', 'March': 'Maret', 'April': 'April', 'May': 'Mei', 'June': 'Juni', 'July': 'Juli', 'August': 'Agustus', 'September': 'September', 'October': 'Oktober', 'November': 'November', 'December': 'Desember'}
+        
+        day_name = days_id[now.strftime('%A')]
+        day_date = now.strftime('%d')
+        month_name = months_id[now.strftime('%B')]
+        year = now.strftime('%Y')
+        time_str = now.strftime('%H:%M')
+        
+        # Format: "Rabu, 28 Januari 2026 | 12:14"
+        current_time = f"{day_name}, {day_date} {month_name} {year} | {time_str}"
+        
+        return render_template('pages/employee_dashboard.html',
+            user_stats=user_stats,
+            recent_recordings=[r.to_dict() for r in recent],
+            current_time=current_time,
+            platforms=config.PLATFORMS
+        )
 
 
 @main_bp.route('/monitoring')
@@ -117,10 +195,11 @@ def team():
     # Stats per pegawai
     pegawai_stats = {}
     for p in pegawai_list:
+        # Count unique resi per pegawai
         count = PackingRecord.query.filter_by(
             pegawai=p.nama,
             status='COMPLETED'
-        ).count()
+        ).with_entities(PackingRecord.resi).distinct().count()
         pegawai_stats[p.id] = count
     
     return render_template('pages/team.html',
