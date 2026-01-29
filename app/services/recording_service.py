@@ -14,6 +14,7 @@ from app.utils import create_recording_folder, generate_metadata_json
 import os
 import cv2
 import subprocess
+from app.utils.logger import video_logger, audit_logger, get_trace_id
 
 
 # ============================================
@@ -63,7 +64,7 @@ class RecordingService:
             
             if not found_in_memory:
                 # It's a zombie from a previous crash/restart
-                print(f"[Recording] Detected zombie recording (ID: {record.id}, Resi: {record.resi})")
+                video_logger.warning(f"Detected zombie recording", extra={'context': {'id': record.id, 'resi': record.resi}})
                 self._mark_record_as_zombie(record, "Server restarted/Process missing")
                 return None
 
@@ -71,7 +72,7 @@ class RecordingService:
         if record.waktu_mulai:
             elapsed = (datetime.now() - record.waktu_mulai).total_seconds()
             if elapsed > 14400:  # 4 Hours
-                print(f"[Recording] Detected stale recording (ID: {record.id})")
+                video_logger.warning(f"Detected stale recording (timeout)", extra={'context': {'id': record.id}})
                 self._mark_record_as_zombie(record, "Recording timed out (4 hours limit)")
                 return None
         
@@ -85,15 +86,14 @@ class RecordingService:
             record.waktu_selesai = datetime.now()
             self.db.session.commit()
         except Exception as e:
-            print(f"[Recording] Error marking zombie: {e}")
+            video_logger.error(f"Error marking zombie: {e}")
             self.db.session.rollback()
     
     def _record_video_thread(self, recording_id, camera_url, output_path, stop_event):
         """
-        Background thread for video recording using MJPEG + FFmpeg conversion
-        Strategy: Record to MJPEG .avi (reliable) → Convert to H.264 .mp4 (browser-compatible)
+        Background thread for video recording.
         """
-        print(f"[Recording] ⚡ Thread STARTED for {recording_id}")
+        video_logger.info(f"Thread STARTED for {recording_id}", extra={'context': {'camera': camera_url}})
         
         # Temp file for MJPEG recording
         temp_path = str(output_path).replace('.mp4', '.avi')
@@ -102,8 +102,6 @@ class RecordingService:
             import traceback
             import subprocess
             from app.services.camera_service import get_camera_stream
-            
-            print(f"[Recording] Imports successful, connecting to camera: {camera_url}")
             
             # Wait for camera
             camera = get_camera_stream(camera_url)
@@ -114,7 +112,7 @@ class RecordingService:
                 retries += 1
                 
             if not camera:
-                print(f"[Recording] Thread abort: Camera {camera_url} unavailable")
+                video_logger.error(f"Thread abort: Camera {camera_url} unavailable")
                 return
 
             # Wait for first frame
@@ -126,7 +124,7 @@ class RecordingService:
                 wait_frame += 1
             
             if frame is None:
-                print(f"[Recording] Thread abort: No frame received")
+                video_logger.error(f"Thread abort: No frame received")
                 return
 
             h, w = frame.shape[:2]
@@ -137,34 +135,38 @@ class RecordingService:
             out = cv2.VideoWriter(temp_path, fourcc, fps, (w, h))
             
             if not out.isOpened():
-                print(f"[Recording] ❌ Failed to open MJPEG writer at {temp_path}")
+                video_logger.error(f"Failed to open MJPEG writer at {temp_path}")
                 return
                 
-            print(f"[Recording] ✅ MJPEG writer initialized: {temp_path} ({w}x{h} @ {fps}fps)")
+            video_logger.info(f"MJPEG writer initialized", extra={'context': {'path': temp_path, 'res': f"{w}x{h}", 'fps': fps}})
             
             # Recording loop
             last_ts = 0
             frames_written = 0
             
-            while not stop_event.is_set():
-                current_ts = camera.last_update
-                if current_ts > last_ts:
-                    frame = camera.get_raw_frame()
-                    if frame is not None:
-                        out.write(frame)
-                        last_ts = current_ts
-                        frames_written += 1
-                        # if frames_written % 30 == 0:
-                        #     print(f"[Recording] {recording_id}: Written {frames_written} frames")
-                        time.sleep(1.0/fps)
+            try:
+                while not stop_event.is_set():
+                    current_ts = camera.last_update
+                    if current_ts > last_ts:
+                        frame = camera.get_raw_frame()
+                        if frame is not None:
+                            out.write(frame)
+                            last_ts = current_ts
+                            frames_written += 1
+                            # if frames_written % 30 == 0:
+                            #     print(f"[Recording] {recording_id}: Written {frames_written} frames")
+                            time.sleep(1.0/fps)
+                        else:
+                            time.sleep(0.01)
                     else:
-                        time.sleep(0.01)
-                else:
-                    time.sleep(0.005)
-            
-            # Close MJPEG writer
-            out.release()
-            print(f"[Recording] MJPEG capture finished. Frames: {frames_written}")
+                        time.sleep(0.005)
+            except Exception as e:
+                print(f"[Recording] ❌ Loop error: {e}")
+            finally:
+                # CRITICAL: Always release the file handle
+                if out:
+                    out.release()
+                print(f"[Recording] MJPEG capture finished/stopped. Frames: {frames_written}")
             
             # ============================================================
             # FFmpeg Conversion: MJPEG (.avi) → H.264 (.mp4)
@@ -288,6 +290,8 @@ class RecordingService:
             t.daemon = True
             t.start()
             
+
+            
             # Add to active recordings
             with recording_lock:
                 active_recordings[recording_id] = {
@@ -303,11 +307,11 @@ class RecordingService:
                     'thread': t
                 }
             
-            print(f"[Recording] Started recording {recording_id} for {resi}")
+            audit_logger.info(f"RECORDING STARTED", extra={'context': {'resi': resi, 'pegawai': pegawai, 'rec_id': recording_id}})
             return True, "Recording started", recording_id
             
         except Exception as e:
-            print(f"[Recording] Error starting recording: {e}")
+            video_logger.error(f"Error starting recording: {e}", exc_info=True)
             self.db.session.rollback()
             return False, f"Error: {str(e)}", None
     
@@ -420,10 +424,8 @@ class RecordingService:
             
             self.db.session.commit()
             
-            # Check file existence explicitly (since it's not a model property)
-            import config
-            full_path_check = os.path.join(config.RECORDINGS_FOLDER, record.file_video) if record.file_video else ''
-            file_exists_status = os.path.exists(full_path_check) if full_path_check else False
+            # Check file existence explicitly using the absolute path we already have
+            file_exists_status = os.path.exists(video_path_abs) if video_path_abs else False
 
             result_data = {
                 'video_url': f"/recordings/{record.file_video}" if record.file_video else None,
@@ -432,11 +434,19 @@ class RecordingService:
                 'file_exists': file_exists_status
             }
             
-            print(f"[Recording] Stopped recording {recording_id}")
+
+            
+            video_logger.info(f"Stopped recording {recording_id}")
+            audit_logger.info(f"RECORDING STOPPED", extra={'context': {
+                'resi': record.resi, 
+                'duration': record.durasi_detik,
+                'size_kb': record.file_size_kb,
+                'status': record.status
+            }})
             return True, "Recording stopped successfully", result_data
             
         except Exception as e:
-            print(f"[Recording] Error stopping recording: {e}")
+            video_logger.error(f"Error stopping recording: {e}", exc_info=True)
             self.db.session.rollback()
             return False, f"Error: {str(e)}", {}
     
@@ -472,4 +482,3 @@ class RecordingService:
             'active_recording': active,
             'stats': stats
         }
-

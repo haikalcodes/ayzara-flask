@@ -2,11 +2,10 @@
 title Ayzara Secure Server (HTTPS)
 color 0B
 
-echo ==================================================
-echo   STARTING AYZARA SECURE SERVER (HTTPS)
-echo   Certificates: .\ssl\
-echo ==================================================
-echo.
+==================================================
+  STARTING AYZARA SECURE SERVER (HTTPS)
+  Certificates: .\ssl\
+==================================================
 
 :check_venv
 if exist "venv\Scripts\activate.bat" (
@@ -24,12 +23,9 @@ if not exist "ssl\cert.pem" (
 
 :start_app
 echo.
-echo [INFO] Starting Application...
-echo [INFO] Browser will open automatically in 3 seconds...
-
-:: Auto-open browser in 3 seconds (minimized window)
+[INFO] Starting Application...
+[INFO] Browser will open automatically in 3 seconds...
 start /min cmd /c "timeout /t 3 >nul && start https://localhost:5000"
-
 python run_dev_secure.py
 
 echo.

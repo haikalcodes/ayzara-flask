@@ -22,6 +22,10 @@
 
 <!-- Stats for specific user -->
 <div class="row g-4 mb-4">
+    <div class="col-12">
+        <h6 class="text-muted text-uppercase fw-semibold mb-2 ms-1" style="font-size: 0.75rem; letter-spacing: 1px;">
+            Statistik Hari Ini</h6>
+    </div>
     <div class="col-md-4">
         <div class="stat-card">
             <div class="stat-icon"><i class="bi bi-box-seam"></i></div>
@@ -102,7 +106,6 @@
                     </thead>
                     <tbody>
                         {% if recent_recordings %}
-                        {% for rec in recent_recordings %}
                         {% for rec in recent_recordings %}
                         <tr>
                             <td data-label="Waktu" class="ps-4 text-muted small">{{ rec.waktu_mulai }}</td>

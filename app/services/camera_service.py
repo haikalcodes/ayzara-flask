@@ -16,7 +16,9 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 import platform
+import platform
 import numpy as np
+from app.utils.logger import video_logger
 
 
 # ============================================
@@ -132,7 +134,7 @@ class VideoCamera:
                 time.sleep(0.1)
             
             if not valid_frame_found:
-                print(f"[Camera] {url} validation FAILED - no valid frames")
+                video_logger.error(f"Validation FAILED - no valid frames", extra={'context': {'url': url}})
                 self.cap.release()
                 self.cap = None
                 self.running = False
@@ -208,7 +210,7 @@ class VideoCamera:
                     
                     # CRITICAL: Auto-shutdown if too many errors (prevent spam)
                     if self.consecutive_errors > 50:  # ~5 seconds of continuous failure
-                        print(f"[{self.url}] Too many errors ({self.consecutive_errors}), shutting down camera thread")
+                        video_logger.error(f"Too many errors ({self.consecutive_errors}), shutting down camera thread", extra={'context': {'url': self.url}})
                         self.running = False
                         try:
                             if socketio:
@@ -291,7 +293,7 @@ def get_camera_stream(url):
             active_cameras[url] = cam
             return cam
         except Exception as e:
-            print(f"[Camera] Error creating camera {url}: {e}")
+            video_logger.error(f"Error creating camera {url}: {e}")
             return None
 
 

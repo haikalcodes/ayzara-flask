@@ -36,8 +36,8 @@ if __name__ == '__main__':
     print(f"   AYZARA DASHBOARD - PRODUCTION MODE (Stable)")
     print(f"   v{config.APP_VERSION}")
     print(f"{'='*60}")
-    print(f"   ► Access Connect : http://<IP-SERVER>:{port}")
-    print(f"   ► Engine         : Standard Threading (Best for OpenCV/Windows)")
+    print(f"   >> Access Connect : http://<IP-SERVER>:{port}")
+    print(f"   >> Engine         : Standard Threading (Best for OpenCV/Windows)")
     print(f"{'='*60}\n")
     
     # Run using SocketIO (Standard Threading)

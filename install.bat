@@ -22,6 +22,8 @@ set "VC_FILE=vcredist_2013_x64.exe"
 :: Assuming Python 3.14.2 URL pattern for 2026
 set "PY_URL=https://www.python.org/ftp/python/3.14.2/python-3.14.2-amd64.exe"
 set "PY_FILE=python-3.14.2-amd64.exe"
+set "NODE_URL=https://nodejs.org/dist/v20.11.0/node-v20.11.0-x64.msi"
+set "NODE_FILE=node-v20.11.0-x64.msi"
 goto :install_deps
 
 :x86
@@ -31,6 +33,8 @@ set "VC_URL=https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91D
 set "VC_FILE=vcredist_2013_x86.exe"
 set "PY_URL=https://www.python.org/ftp/python/3.14.2/python-3.14.2.exe"
 set "PY_FILE=python-3.14.2.exe"
+set "NODE_URL=https://nodejs.org/dist/v20.11.0/node-v20.11.0-x86.msi"
+set "NODE_FILE=node-v20.11.0-x86.msi"
 goto :install_deps
 
 :install_deps
@@ -160,6 +164,72 @@ call venv\Scripts\activate.bat
 pip install -r requirements.txt
 
 echo.
+
+:: 5. Setup Auto-Restart (PM2)
+echo.
+echo ==================================================
+echo   AUTO-RESTART SETUP (Optional)
+echo ==================================================
+echo.
+echo This will install PM2 (Process Manager) to ensure the app
+echo restarts automatically if it crashes or Windows reboots.
+echo.
+echo [REQUIREMENT] You need Node.js installed for this feature.
+echo.
+echo [1] Install Node.js ^& PM2 (Recommended for Production)
+echo [2] Skip (I will run it manually)
+echo.
+set /p "pm2_choice=Your Choice (1/2) [2]: "
+
+if "%pm2_choice%"=="1" goto :setup_node_pm2
+goto :finish_install
+
+:setup_node_pm2
+echo.
+echo [INFO] Checking for Node.js...
+node --version >nul 2>&1
+if !errorlevel! neq 0 (
+    echo [WARNING] Node.js is NOT installed.
+    echo [INFO] Downloading Node.js 20.11.0 LTS...
+    
+    if not exist "%NODE_FILE%" (
+        curl -L "%NODE_URL%" -o "%NODE_FILE%"
+    )
+    
+    echo [INFO] Installing Node.js...
+    echo Please wait, this may take a few minutes...
+    start /wait msiexec /i "%NODE_FILE%" /quiet /norestart
+    
+    echo.
+    echo [WARNING] Node.js installed.
+    echo You must RESTART this script or your computer for Node to be detected in PATH.
+    echo.
+    echo [INFO] Trying to refresh environment variables...
+    call refreshenv >nul 2>&1
+    
+    :: Re-check
+    node --version >nul 2>&1
+    if !errorlevel! neq 0 (
+        echo [ERROR] Node.js failed to load in current session.
+        echo Please RESTART THIS SCRIPT manually.
+        pause
+        exit /b
+    )
+)
+
+echo [INFO] Attempting to install PM2...
+echo (If this fails with 'npm is not recognized', please restart your terminal and try again)
+echo.
+call npm install pm2 -g
+call npm install pm2-windows-startup -g
+
+echo.
+echo [SUCCESS] PM2 Installed (if no red errors above).
+echo.
+echo To configure Auto-Restart usage, please read: auto_restart_guide.md
+echo.
+
+:finish_install
 
 
 echo.

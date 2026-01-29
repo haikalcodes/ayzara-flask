@@ -17,6 +17,9 @@ import config
 # Import models
 from app.models import db, init_models
 
+# Import Logger
+from app.utils.logger import app_logger, start_resource_monitor
+
 # Global instances
 socketio = None
 login_manager = None
@@ -84,7 +87,32 @@ def create_app(config_object=config):
     def log_request_info():
         from flask import request
         if request.path.startswith('/api/'):
-            print(f">>> [API] {request.method} {request.path}")
+            # Using logger instead of print
+            app_logger.info(f"API Request: {request.method} {request.path}")
+
+    # Global Error Handler
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        from flask import request, jsonify
+        # Log error with stacktrace
+        app_logger.error(
+            f"Unhandled Exception: {str(e)}", 
+            exc_info=True,
+            extra={'context': {'url': request.url}}
+        )
+        return jsonify({"success": False, "error": "Internal Server Error"}), 500
+
+    # Start Resource Monitor (Background Thread)
+    # Ensure it only runs once (check if thread matches name)
+    already_running = False
+    for t in threading.enumerate():
+        if t.name == "ResourceMonitor":
+            already_running = True
+            break
+            
+    if not already_running:
+        start_resource_monitor()
+        print("[Monitor] Resource monitoring thread started")
     
     # Register blueprints
     register_blueprints(app)

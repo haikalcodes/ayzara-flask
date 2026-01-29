@@ -60,6 +60,12 @@
       "name": "Local Camera 5",
       "url": "5",
       "enabled": true
+    },
+    {
+      "id": 5,
+      "name": "IP Webcam (192.168.43.93)",
+      "url": "http://admin:admin@192.168.43.93:8080/video",
+      "enabled": true
     }
   ],
   "active_camera_index": 1,

@@ -41,8 +41,8 @@ if __name__ == '__main__':
     print(f"   AYZARA DASHBOARD - SECURE DEV MODE (HTTPS)")
     print(f"   v{config.APP_VERSION}")
     print(f"{'='*60}")
-    print(f"   ► Access Secure : https://{local_ip}:{port}")
-    print(f"   ► Note          : Install ssl/rootCA.pem on phone for valid lock!")
+    print(f"   >> Access Secure : https://{local_ip}:{port}")
+    print(f"   >> Note          : Install ssl/rootCA.pem on phone for valid lock!")
     print(f"{'='*60}\n")
     
 
