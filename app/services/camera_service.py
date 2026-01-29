@@ -65,6 +65,7 @@ class VideoCamera:
         self.last_update = time.time()
         self.consecutive_errors = 0
         self.zoom_level = 1.0  # 1.0 = no zoom, 2.0 = 2x zoom
+        self.last_heartbeat = time.time()  # Initialize heartbeat
         
         # Determine backend
         is_local = str(url).isdigit()
@@ -240,6 +241,11 @@ class VideoCamera:
                 return None
             self.last_access = time.time()
             return self.last_frame.copy()
+
+    def update_heartbeat(self):
+        """Update the heartbeat timestamp"""
+        with self.lock:
+            self.last_heartbeat = time.time()
 
 
 # ============================================
@@ -745,3 +751,39 @@ def release_camera(url):
         if url in active_cameras:
             active_cameras[url].stop()
             del active_cameras[url]
+
+
+# ============================================
+# WATCHDOG SERVICE
+# ============================================
+def camera_watchdog():
+    """Monitor cameras for heartbeat timeouts"""
+    print("[Camera] Watchdog started (Timeout: 10s)")
+    while True:
+        try:
+            with camera_lock:
+                # Create copy of keys to avoid modification during iteration
+                urls = list(active_cameras.keys())
+                now = time.time()
+                
+                for url in urls:
+                    cam = active_cameras[url]
+                    # Check timeout (10 seconds)
+                    if (now - cam.last_heartbeat) > 10.0:
+                        print(f"[Watchdog] Camera {url} timed out (No heartbeat > 10s). Releasing...")
+                        cam.stop()
+                        del active_cameras[url]
+                        
+                        # Also clear usage
+                        with camera_usage_lock:
+                            if url in camera_usage:
+                                del camera_usage[url]
+                                
+        except Exception as e:
+            print(f"[Watchdog] Error: {e}")
+            
+        time.sleep(2.0) # Check every 2 seconds
+
+# Start watchdog in background
+watchdog_thread = threading.Thread(target=camera_watchdog, daemon=True)
+watchdog_thread.start()

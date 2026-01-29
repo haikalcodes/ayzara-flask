@@ -589,6 +589,7 @@
     let healthCheckInterval = null; // Renamed from previewInterval
     let barcodeLoopInterval = null; // New separate interval for barcode loop
     let timerInterval = null;
+    let heartbeatInterval = null; // Pulse to keep camera alive
 
     // Scanner
     let html5QrCode = null; // Local scanner instance
@@ -935,11 +936,59 @@
 
 
     // Prevent hanging on navigation
+    // Combined cleanup handler
+    function forceReleaseAll() {
+        console.log(">>> [Lifecycle] Force releasing all cameras...");
+        stopPreview(true);
+        stopScanning(true);
+    }
+
     window.addEventListener('beforeunload', function () {
-        stopPreview();
+        forceReleaseAll();
     });
 
-    function stopPreview() {
+    window.addEventListener('pagehide', function () {
+        forceReleaseAll();
+    });
+
+
+    // Heartbeat System
+    function startHeartbeat(url) {
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        console.log(">>> [Heartbeat] Starting for", url);
+
+        // Initial beat
+        sendHeartbeat(url);
+
+        heartbeatInterval = setInterval(() => {
+            sendHeartbeat(url);
+        }, 3000); // Send every 3 seconds (Watchdog timeout is 10s)
+    }
+
+    function stopHeartbeat() {
+        if (heartbeatInterval) {
+            console.log(">>> [Heartbeat] Stopping");
+            clearInterval(heartbeatInterval);
+            heartbeatInterval = null;
+        }
+    }
+
+    function sendHeartbeat(url) {
+        if (!url) return;
+        fetch('/api/camera/heartbeat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: url })
+        }).then(res => {
+            if (res.status === 404) {
+                console.warn(">>> [Heartbeat] Server says camera closed. Force disconnect?");
+                // Optional: Force UI disconnect if server killed it
+            }
+        }).catch(e => console.log('Heartbeat failed', e));
+    }
+
+    function stopPreview(force = false) {
+        stopHeartbeat(); // Stop pulse immediately
         if (healthCheckInterval) clearInterval(healthCheckInterval);
         // DO NOT clear barcodeLoopInterval here. That belongs to the Scanner logic.
         // if (barcodeLoopInterval) clearTimeout(barcodeLoopInterval);
@@ -953,7 +1002,7 @@
         // Explicitly tell server to stop this camera stream
         // SHARED CAMERA FIX: Only release if NOT used by scanner
         if (selectedCameraUrl) {
-            if (selectedCameraUrl === scanningCameraUrl) {
+            if (!force && selectedCameraUrl === scanningCameraUrl) {
                 console.log(">>> [Preview] Skipping release: Camera shared with Scanner");
                 return;
             }
@@ -976,8 +1025,8 @@
     function closeAllCameras() {
         console.log('>>> [Close] Closing ALL connections');
 
-        stopPreview();
-        stopScanning();
+        stopPreview(true);
+        stopScanning(true);
 
         recordingCameraUrl = '';
         document.getElementById('camera-select-recording').value = '';
@@ -1217,7 +1266,7 @@
     }
 
     // Stop all scanning logic
-    function stopScanning() {
+    function stopScanning(force = false) {
         // 1. Stop Local
         isLocalScanActive = false;
         if (html5QrCode) {
@@ -1244,7 +1293,7 @@
         // NEW: Explicitly release backend camera on server
         if (scanningCameraUrl && scanningCameraUrl !== 'local_client_device') {
             // SHARED CAMERA FIX: Only release if NOT used by recorder
-            if (scanningCameraUrl === recordingCameraUrl) {
+            if (!force && scanningCameraUrl === recordingCameraUrl) {
                 console.log(">>> [Scan] Skipping release: Camera shared with Recorder");
             } else {
                 console.log('>>> [Scan] Releasing backend camera:', scanningCameraUrl);
@@ -1800,6 +1849,9 @@
 
         // Set stream source with cache buster
         img.src = `/video_feed?url=${encodeURIComponent(recordingCameraUrl)}&t=${new Date().getTime()}`;
+
+        // START HEARTBEAT
+        startHeartbeat(recordingCameraUrl);
 
         // Timeout check: if still "Menghubungkan" after 8s
         setTimeout(() => {

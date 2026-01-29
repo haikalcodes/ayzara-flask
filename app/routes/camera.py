@@ -410,7 +410,36 @@ def api_camera_usage():
     
     username = current_user.username if current_user.is_authenticated else 'Unknown'
     mark_camera_in_use(url, username, purpose)
+    username = current_user.username if current_user.is_authenticated else 'Unknown'
+    mark_camera_in_use(url, username, purpose)
     return jsonify({'success': True})
+
+
+@camera_bp.route('/api/camera/heartbeat', methods=['POST'])
+@login_required
+def api_camera_heartbeat():
+    """Update camera heartbeat timestamp to prevent watchdog timeout"""
+    try:
+        data = request.get_json() or {}
+        url = data.get('url')
+        
+        if not url:
+            return jsonify({'success': False}), 400
+            
+        from app.services.camera_service import active_cameras, camera_lock
+        
+        with camera_lock:
+            if url in active_cameras:
+                active_cameras[url].update_heartbeat()
+                return jsonify({'success': True})
+            else:
+                # Client thinks camera is open, but server closed it.
+                # Client should probably stop sending heartbeats or try to reconnect.
+                return jsonify({'success': False, 'message': 'Camera not active'}), 404
+                
+    except Exception as e:
+        print(f"[Heartbeat] Error: {e}")
+        return jsonify({'success': False}), 500
 
 
 # ============================================
