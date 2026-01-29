@@ -74,7 +74,7 @@
                 <a href="{{ url_for('main.videos') }}" class="btn btn-sm btn-glass">Lihat Semua</a>
             </div>
             <div class="card-body p-0">
-                <table class="table table-hover mb-0">
+                <table class="table table-hover mb-0 responsive-card">
                     <thead>
                         <tr>
                             <th>Resi</th>
@@ -87,11 +87,12 @@
                     <tbody>
                         {% for rec in recent_recordings[:5] %}
                         <tr>
-                            <td><strong>{{ rec.resi }}</strong></td>
-                            <td>{{ rec.pegawai }}</td>
-                            <td><span class="badge badge-platform">{{ rec.platform }}</span></td>
-                            <td class="text-muted">{{ rec.waktu_mulai[:16] if rec.waktu_mulai else '-' }}</td>
-                            <td>
+                            <td data-label="Resi"><strong>{{ rec.resi }}</strong></td>
+                            <td data-label="Pegawai">{{ rec.pegawai }}</td>
+                            <td data-label="Platform"><span class="badge badge-platform">{{ rec.platform }}</span></td>
+                            <td data-label="Waktu" class="text-muted">{{ rec.waktu_mulai[:16] if rec.waktu_mulai else
+                                '-' }}</td>
+                            <td data-label="Status">
                                 {% if rec.status == 'COMPLETED' %}
                                 <span class="badge badge-status-completed"><i class="bi bi-check-circle-fill me-1"></i>
                                     Selesai</span>

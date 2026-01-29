@@ -70,7 +70,7 @@
                 <h5 class="card-title"><i class="bi bi-trophy me-2"></i>Top Pegawai</h5>
             </div>
             <div class="card-body p-0">
-                <table class="table table-hover mb-0">
+                <table class="table table-hover mb-0 responsive-card">
                     <thead>
                         <tr>
                             <th style="width: 60px;">Peringkat</th>
@@ -81,15 +81,15 @@
                     <tbody>
                         {% for item in leaderboard %}
                         <tr>
-                            <td>
+                            <td data-label="Peringkat">
                                 {% if loop.index == 1 %}🥇
                                 {% elif loop.index == 2 %}🥈
                                 {% elif loop.index == 3 %}🥉
                                 {% else %}{{ loop.index }}
                                 {% endif %}
                             </td>
-                            <td><strong>{{ item[0] }}</strong></td>
-                            <td class="text-end">
+                            <td data-label="Nama Pegawai"><strong>{{ item[0] }}</strong></td>
+                            <td data-label="Total Rekaman" class="text-end">
                                 <span class="badge bg-primary">{{ item[1] }}</span>
                             </td>
                         </tr>

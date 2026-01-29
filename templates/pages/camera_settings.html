@@ -20,7 +20,7 @@
     </div>
     <div class="card-body">
         <div class="table-responsive">
-            <table class="table" id="camera-table">
+            <table class="table responsive-card" id="camera-table">
                 <thead>
                     <tr>
                         <th>Status</th>
@@ -489,19 +489,19 @@
 
         tbody.innerHTML = cameras.map((cam, idx) => `
         <tr data-id="${cam.id}">
-            <td>
+            <td data-label="Status">
                 <span class="status-badge status-checking" id="status-${idx}">
                     <i class="bi bi-hourglass-split me-1"></i> Mengecek...
                 </span>
             </td>
-            <td><strong>${escapeHtml(cam.name)}</strong></td>
-            <td><span class="url-text" title="${escapeHtml(cam.url)}">${escapeHtml(cam.url)}</span></td>
-            <td>
+            <td data-label="Nama"><strong>${escapeHtml(cam.name)}</strong></td>
+            <td data-label="URL"><span class="url-text" title="${escapeHtml(cam.url)}">${escapeHtml(cam.url)}</span></td>
+            <td data-label="Aktif">
                 <span class="status-badge ${cam.enabled ? 'status-online' : 'status-offline'}">
                     ${cam.enabled ? '<i class="bi bi-check-circle me-1"></i> Aktif' : '<i class="bi bi-x-circle me-1"></i> Disabled'}
                 </span>
             </td>
-            <td>
+            <td data-label="Aksi">
                 <button class="btn btn-sm btn-info" onclick="testCamera(${idx})"><i class="bi bi-search"></i> Test</button>
                 <button class="btn btn-sm btn-secondary" onclick="editCamera(${idx})"><i class="bi bi-pencil-square"></i> Edit</button>
                 <button class="btn btn-sm btn-danger" onclick="deleteCamera(${idx})"><i class="bi bi-trash"></i> Hapus</button>

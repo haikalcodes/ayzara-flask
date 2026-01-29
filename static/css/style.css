@@ -1138,9 +1138,305 @@ b {
 
 /* Fix for specific alert in recording.html */
 .swal2-html-container .text-start p {
+    color: var(--text-primary);
+}
+
+/* Bootstrap overrides */
+.text-dark {
+    color: var(--text-primary) !important;
+}
+
+.text-secondary {
+    color: var(--text-secondary) !important;
+}
+
+/* Form elements */
+select.form-control,
+select.form-select,
+input.form-control,
+textarea.form-control {
+    color: var(--text-primary) !important;
+    background-color: var(--bg-glass) !important;
+}
+
+select.form-control option,
+select.form-select option {
+    background-color: var(--bg-darker);
+    color: var(--text-primary);
+}
+
+/* Dropdown menus */
+.dropdown-menu {
+    background-color: var(--bg-darker);
+    border: 1px solid var(--border-color);
+}
+
+.dropdown-item {
+    color: var(--text-primary);
+}
+
+.dropdown-item:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* List groups */
+.list-group-item {
+    background-color: var(--bg-card);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+/* Code blocks */
+code,
+pre {
+    color: var(--primary-light);
+    background-color: var(--bg-glass);
+}
+
+/* Links */
+a {
+    color: var(--primary);
+}
+
+a:hover {
+    color: var(--primary-light);
+}
+
+/* Ensure card text is visible */
+.card p,
+.card span,
+.card div,
+.card label,
+.card small {
+    color: var(--text-primary);
+}
+
+/* Table text */
+.table,
+.table td,
+.table th {
+    color: var(--text-primary) !important;
+}
+
+/* Input group text */
+.input-group-text {
+    background-color: var(--bg-glass);
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+}
+
+/* Ensure all headings are visible */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    color: var(--text-primary) !important;
+}
+
+/* Page header */
+.page-header h1,
+.page-header p {
+    color: var(--text-primary);
+}
+
+/* Ensure muted text is still visible */
+.text-muted,
+small.text-muted {
+    color: var(--text-muted) !important;
+    opacity: 0.7;
+}
+
+/* Specific fix for labels */
+label {
+    color: var(--text-secondary) !important;
+}
+
+/* Fix for strong/bold text */
+strong,
+b {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* ============================================
+   SWEETALERT2 DARK THEME
+   ============================================ */
+
+.swal2-popup {
+    background-color: var(--bg-darker) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 16px !important;
+    box-shadow: var(--shadow-lg) !important;
+}
+
+.swal2-title {
+    color: var(--text-primary) !important;
+}
+
+.swal2-html-container {
+    color: var(--text-secondary) !important;
+}
+
+.swal2-footer {
+    border-top: 1px solid var(--border-color) !important;
+    color: var(--text-muted) !important;
+}
+
+.swal2-close:focus {
+    box-shadow: none !important;
+}
+
+.swal2-confirm.swal2-styled {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%) !important;
+    border-radius: 10px !important;
+    font-weight: 500 !important;
+    padding: 10px 24px !important;
+}
+
+.swal2-confirm.swal2-styled:focus {
+    box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.3) !important;
+}
+
+.swal2-cancel.swal2-styled {
+    background: var(--bg-glass) !important;
+    border: 1px solid var(--border-color) !important;
+    color: var(--text-primary) !important;
+    border-radius: 10px !important;
+}
+
+.swal2-icon.swal2-warning {
+    border-color: var(--warning) !important;
+    color: var(--warning) !important;
+}
+
+.swal2-icon.swal2-error {
+    border-color: var(--danger) !important;
+    color: var(--danger) !important;
+}
+
+.swal2-icon.swal2-success {
+    border-color: var(--success) !important;
+    color: var(--success) !important;
+}
+
+.swal2-icon.swal2-success .swal2-success-ring {
+    border: .25em solid rgba(16, 185, 129, .3) !important;
+}
+
+.swal2-icon.swal2-success [class^=swal2-success-line] {
+    background-color: var(--success) !important;
+}
+
+/* Fix for specific alert in recording.html */
+.swal2-html-container .text-start p {
     color: var(--text-secondary) !important;
 }
 
 .swal2-html-container .text-start p strong {
     color: var(--text-primary) !important;
+}
+
+/* ============================================
+   RESPONSIVE TABLES (MOBILE & TABLET)
+   ============================================ */
+@media (max-width: 992px) {
+
+    /* Scope strictly to tables with 'responsive-card' class to avoid breaking layout tables */
+    .table.responsive-card,
+    .table.responsive-card tbody,
+    .table.responsive-card tr,
+    .table.responsive-card td {
+        display: block !important;
+        width: 100% !important;
+    }
+
+    /* Hide table headers completely */
+    .table.responsive-card thead {
+        display: none !important;
+    }
+
+    .table.responsive-card tr {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        margin-bottom: 16px;
+        padding: 16px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        display: flex !important;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .table.responsive-card td {
+        /* Behave like a "row" */
+        border: none !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+        position: relative;
+        padding-left: 45% !important;
+        /* Make space for label */
+        padding-top: 12px !important;
+        padding-bottom: 12px !important;
+        text-align: right;
+        min-height: 40px;
+        display: flex !important;
+        align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+    }
+
+    .table.responsive-card td:last-child {
+        border-bottom: 0 !important;
+    }
+
+    .table.responsive-card td::before {
+        /* Now like a table header */
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        width: 40%;
+        padding-right: 15px;
+        white-space: nowrap;
+        content: attr(data-label);
+        text-align: left;
+        font-weight: 700;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        font-size: 11px;
+        letter-spacing: 0.5px;
+    }
+
+    /* Adjust badges and buttons for mobile layout */
+    .table.responsive-card td .btn {
+        width: 100%;
+        margin-bottom: 6px;
+        display: block;
+    }
+
+    .table.responsive-card td .status-badge {
+        display: inline-flex;
+    }
+
+    /* Specific fixes for Actions column */
+    .table.responsive-card td[data-label="Aksi"] {
+        display: flex !important;
+        flex-direction: column;
+        /* Stack buttons vertically */
+        gap: 8px;
+        padding-left: 0 !important;
+        /* Full width for actions */
+        padding-right: 0 !important;
+        text-align: center;
+        margin-top: 12px;
+        border-top: 1px solid var(--border-color) !important;
+        padding-top: 16px !important;
+    }
+
+    .table.responsive-card td[data-label="Aksi"]::before {
+        display: none;
+        /* Hide label for actions */
+    }
 }

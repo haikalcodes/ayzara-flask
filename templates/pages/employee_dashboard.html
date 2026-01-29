@@ -90,7 +90,7 @@
                 <a href="{{ url_for('main.videos') }}" class="btn btn-sm btn-glass">Lihat Riwayat</a>
             </div>
             <div class="card-body p-0">
-                <table class="table table-hover mb-0 align-middle">
+                <table class="table table-hover mb-0 align-middle responsive-card">
                     <thead style="background-color: rgba(255,255,255,0.05); color: #8898aa;">
                         <tr>
                             <th class="ps-4">Waktu</th>
@@ -103,14 +103,15 @@
                     <tbody>
                         {% if recent_recordings %}
                         {% for rec in recent_recordings %}
+                        {% for rec in recent_recordings %}
                         <tr>
-                            <td class="ps-4 text-muted small">{{ rec.waktu_mulai }}</td>
-                            <td class="fw-bold text-primary">{{ rec.resi }}</td>
-                            <td>
+                            <td data-label="Waktu" class="ps-4 text-muted small">{{ rec.waktu_mulai }}</td>
+                            <td data-label="Resi" class="fw-bold text-primary">{{ rec.resi }}</td>
+                            <td data-label="Platform">
                                 <span class="badge badge-platform">{{ rec.platform }}</span>
                             </td>
-                            <td>{{ rec.durasi_detik }} detik</td>
-                            <td>
+                            <td data-label="Durasi">{{ rec.durasi_detik }} detik</td>
+                            <td data-label="Status">
                                 {% if rec.status == 'COMPLETED' %}
                                 <span class="badge badge-status-completed">Selesai</span>
                                 {% elif rec.status == 'RECORDING' %}
