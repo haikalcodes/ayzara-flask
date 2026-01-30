@@ -959,15 +959,10 @@
 
     // Heartbeat System
     function startHeartbeat(url) {
+        // [ANTIGRAVITY] HEARTBEAT DISABLED BY USER REQUEST
+        console.log(">>> [Heartbeat] Disabled (Logic Removed)");
         if (heartbeatInterval) clearInterval(heartbeatInterval);
-        console.log(">>> [Heartbeat] Starting for", url);
-
-        // Initial beat
-        sendHeartbeat(url);
-
-        heartbeatInterval = setInterval(() => {
-            sendHeartbeat(url);
-        }, 3000); // Send every 3 seconds (Watchdog timeout is 10s)
+        heartbeatInterval = null;
     }
 
     function stopHeartbeat() {
@@ -1303,12 +1298,18 @@
             } else {
                 console.log('>>> [Scan] Releasing backend camera:', scanningCameraUrl);
                 const data = JSON.stringify({ url: scanningCameraUrl });
-                // Use fetch for standard operations
-                fetch('/api/camera/release', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: data
-                }).catch(e => console.log('Scan Release failed', e));
+                // [ANTIGRAVITY] Use sendBeacon if forcing (unload)
+                if (force && navigator.sendBeacon) {
+                    const blob = new Blob([data], { type: 'application/json' });
+                    navigator.sendBeacon('/api/camera/release', blob);
+                } else {
+                    fetch('/api/camera/release', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        keepalive: true,
+                        body: data
+                    }).catch(e => console.log('Scan Release failed', e));
+                }
             }
         }
 

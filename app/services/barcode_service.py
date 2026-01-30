@@ -11,6 +11,25 @@ from pyzbar.pyzbar import decode
 
 class BarcodeService:
     """Service for handling barcode detection and validation"""
+
+    @staticmethod
+    def sharpen_image(image):
+        gaussian = cv2.GaussianBlur(image, (0, 0), 3.0)
+        return cv2.addWeighted(image, 1.5, gaussian, -0.5, 0)
+    
+    @staticmethod
+    def crop_center(frame, crop_percent=0.6):
+        """Crop center of the frame (Digital Zoom effect)"""
+        h, w = frame.shape[:2]
+        cx, cy = w // 2, h // 2
+        cw, ch = int(w * crop_percent), int(h * crop_percent)
+        
+        x1 = max(0, cx - cw // 2)
+        y1 = max(0, cy - ch // 2)
+        x2 = min(w, x1 + cw)
+        y2 = min(h, y1 + ch)
+        
+        return frame[y1:y2, x1:x2]
     
     @staticmethod
     def detect_barcode_from_frame(frame):
@@ -27,12 +46,20 @@ class BarcodeService:
             return None
         
         try:
+            # STRATEGY 0: Center Crop at ORIGINAL Resolution (High Detail)
+            # This fixes the issue where resizing destroys small barcodes
+            center = BarcodeService.crop_center(frame)
+            barcodes = decode(center)
+            if barcodes:
+                print("[Barcode] ✅ FOUND in Stage 0 (Center Crop High-Res)")
+                return barcodes[0].data.decode('utf-8')
+
             # OPTIMIZATION: Resize large frames to speed up processing
-            # Max width 800px maintains readability while reducing CPU load
+            # [ANTIGRAVITY] RELAXED LIMIT TO 2000px (Support 1080p)
             height, width = frame.shape[:2]
-            if width > 800:
-                scale = 800 / width
-                frame = cv2.resize(frame, (800, int(height * scale)))
+            if width > 2000:
+                scale = 2000 / width
+                frame = cv2.resize(frame, (2000, int(height * scale)))
 
             # STRATEGY 1: Detect on Original Frame (Fastest)
             barcodes = decode(frame)
@@ -67,6 +94,38 @@ class BarcodeService:
             barcodes = decode(thresh)
             if barcodes:
                 print("[Barcode] ✅ FOUND in Stage 4 (Threshold)")
+                return barcodes[0].data.decode('utf-8')
+
+            # --- ANTIGRAVITY UPGRADES ---
+
+            # 4. Sharpening (Fixes soft IP cam focus)
+            sharpened = BarcodeService.sharpen_image(enhanced_gray)
+            
+            # STRATEGY 5: Sharpened
+            barcodes = decode(sharpened)
+            if barcodes:
+                print("[Barcode] ✅ FOUND in Stage 5 (Sharpened)")
+                return barcodes[0].data.decode('utf-8')
+
+            # 5. Adaptive Threshold (Fixes uneven lighting/shadows)
+            # Block size 11, C=2
+            adaptive = cv2.adaptiveThreshold(enhanced_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                           cv2.THRESH_BINARY, 11, 2)
+            
+            # STRATEGY 6: Adaptive Threshold
+            barcodes = decode(adaptive)
+            if barcodes:
+                print("[Barcode] ✅ FOUND in Stage 6 (Adaptive)")
+                return barcodes[0].data.decode('utf-8')
+
+            # 6. Inversion (Fixes glare/specular highlights on black bars)
+            # Sometimes glare makes black bars look white. Inverting flips this.
+            inverted = cv2.bitwise_not(thresh)
+            
+            # STRATEGY 7: Inverted Threshold
+            barcodes = decode(inverted)
+            if barcodes:
+                print("[Barcode] ✅ FOUND in Stage 7 (Inverted)")
                 return barcodes[0].data.decode('utf-8')
             
             # If we reach here, all stages failed

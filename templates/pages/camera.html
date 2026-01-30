@@ -401,6 +401,24 @@
         currentZoom = 1.0;
     }
 
+    // [ANTIGRAVITY] ADDED PAGE CLEANUP
+    window.addEventListener('beforeunload', function() {
+        if (selectedCameraUrl && selectedCameraUrl !== 'local_client_device') {
+            const data = JSON.stringify({ url: selectedCameraUrl });
+            if (navigator.sendBeacon) {
+                const blob = new Blob([data], {type: 'application/json'});
+                navigator.sendBeacon('/api/camera/release', blob);
+            } else {
+                fetch('/api/camera/release', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    keepalive: true,
+                    body: data
+                });
+            }
+        }
+    });
+
     function checkCamera() {
         const select = document.getElementById('cameraSelect');
         const url = select.value;
