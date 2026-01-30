@@ -238,36 +238,42 @@ def camera_feed(camera_url):
 @login_required
 def video_feed():
     """Legacy video feed endpoint (for compatibility)"""
-    url = request.args.get('url')
-    processing_mode = request.args.get('type')
-    
-    if not url:
-        return "URL parameter required", 400
-        
-    # Mark usage for preview/monitoring
-    from flask_login import current_user
-    from app.services.camera_service import mark_camera_in_use
-    from flask import stream_with_context
-    
     try:
-        username = current_user.username if current_user.is_authenticated else 'Unknown'
-    except Exception:
-        username = 'Unknown'
-    
-    # Update usage purpose if type is scan (auto-mark)
-    purpose = 'scan' if processing_mode == 'scan' else 'preview'
-    mark_camera_in_use(url, username, purpose)
-
-    camera = get_camera_stream(url)
-    
-    if not camera:
-        # Return proper HTTP error to trigger img.onerror in browser
-        from flask import abort
-        print(f"[video_feed] Camera {url} failed to initialize, returning 503")
-        abort(503)  # Service Unavailable - triggers onerror
+        url = request.args.get('url')
+        processing_mode = request.args.get('type')
         
-    return Response(stream_with_context(gen_frames(camera, processing_mode=processing_mode)),
-                    mimetype='multipart/x-mixed-replace; boundary=frame')
+        if not url:
+            return "URL parameter required", 400
+            
+        # Mark usage for preview/monitoring
+        from flask_login import current_user
+        from app.services.camera_service import mark_camera_in_use
+        from flask import stream_with_context
+        
+        try:
+            username = current_user.username if current_user.is_authenticated else 'Unknown'
+        except Exception:
+            username = 'Unknown'
+        
+        # Update usage purpose if type is scan (auto-mark)
+        purpose = 'scan' if processing_mode == 'scan' else 'preview'
+        mark_camera_in_use(url, username, purpose)
+
+        camera = get_camera_stream(url)
+        
+        if not camera:
+            # Return proper HTTP error to trigger img.onerror in browser
+            from flask import abort
+            print(f"[video_feed] Camera {url} failed to initialize, returning 503")
+            abort(503)  # Service Unavailable - triggers onerror
+            
+        return Response(stream_with_context(gen_frames(camera, processing_mode=processing_mode)),
+                        mimetype='multipart/x-mixed-replace; boundary=frame')
+    except Exception as e:
+        print(f"[video_feed] CRITICAL ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return "Internal Server Error", 500
 
 
 @camera_bp.route('/api/camera/release', methods=['POST'])
