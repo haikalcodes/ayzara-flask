@@ -3,7 +3,7 @@ import logging
 import ssl
 import socket
 
-# SSL MODE
+#SSL MODE
 os.environ['AYZARA_MODE'] = 'threading'
 
 from app import create_app, init_database
