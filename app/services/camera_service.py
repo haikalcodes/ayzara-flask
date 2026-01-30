@@ -132,7 +132,7 @@ class VideoCamera:
         if mode == 'preview':
             self.target_fps = 10  # Medium-Low FPS for preview (Prevent lag feeling)
         elif mode == 'scan':
-            self.target_fps = 25  # Medium-High FPS for scanning (Increased for dual-camera responsiveness)
+            self.target_fps = 30# Medium-High FPS for scanning (Increased for dual-camera responsiveness)
         elif mode == 'record':
             self.target_fps = 30  # High FPS for recording (Smooth)
         
@@ -288,8 +288,30 @@ class VideoCamera:
                     ret, jpeg = cv2.imencode('.jpg', preview_frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
                 except:
                     return None
+            
+            elif self.usage_mode == 'scan':
+                # [ANTIGRAVITY] OPTIMIZATION: Scan mode needs low latency!
+                # We use lower resolution/quality for the VISUAL stream.
+                # The actual barcode detection uses the raw last_frame (High Quality) in background.
+                quality = 50 
+                h, w = self.last_frame.shape[:2]
+                
+                # Resize to max 640px width for speed
+                if w > 640:
+                    scale = 640 / w
+                    new_h = int(h * scale)
+                    try:
+                        scan_frame = cv2.resize(self.last_frame, (640, new_h))
+                        ret, jpeg = cv2.imencode('.jpg', scan_frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
+                    except:
+                        return None
+                else:
+                    # Already small
+                    ret, jpeg = cv2.imencode('.jpg', self.last_frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
+                    
             else:
-                quality = 85  # High quality for scan/record
+                # 'record' or other modes - Keep High Quality
+                quality = 85  # High quality for record
                 ret, jpeg = cv2.imencode('.jpg', self.last_frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
             
             if ret:

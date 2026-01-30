@@ -931,8 +931,9 @@
         const detectBarcode = () => {
             if (!isSearching || !searchCameraUrl) return;
 
+            // [ANTIGRAVITY] OPTIMIZATION: 100ms (Turbo Mode) as requested
             socket.emit('detect_barcode', { url: searchCameraUrl });
-            barcodeSearchInterval = setTimeout(detectBarcode, 1000);
+            barcodeSearchInterval = setTimeout(detectBarcode, 100);
         };
 
         detectBarcode();

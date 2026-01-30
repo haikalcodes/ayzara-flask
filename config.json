@@ -60,18 +60,6 @@
       "name": "Kamera A+",
       "url": "rtsp://admin:Asdfz12345@192.168.1.101:554/Streaming/Channels/101",
       "enabled": true
-    },
-    {
-      "id": 5,
-      "name": "DroidCam (192.168.43.1)",
-      "url": "http://192.168.43.1:4747/mjpegfeed",
-      "enabled": true
-    },
-    {
-      "id": 6,
-      "name": "Local Camera 0",
-      "url": "1",
-      "enabled": true
     }
   ],
   "active_camera_index": 1,

@@ -386,92 +386,119 @@
                     style="background: rgba(40, 167, 69, 0.1); border: 4px solid #28a745; z-index: 50; pointer-events: none;">
                 </div>
 
-            </div>
-        </div>
-
-        <!-- BOTTOM: RECORDING PREVIEW -->
-        <div id="recording-card-container" class="card mb-3">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5>3. Rekam Video (Bukti)</h5>
-                <div id="recording-timer" class="h4 mb-0 font-monospace d-none">00:00</div>
-            </div>
-
-            <div id="camera-container" class="card-body p-0 position-relative bg-dark text-center"
-                style="min-height: 480px; max-height: 550px; overflow: hidden; background-color: #000; position: relative; display: flex; align-items: center; justify-content: center;">
-                <!-- Camera Image -->
-                <img id="camera-feed" src="" class="img-fluid"
-                    style="max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: none;">
-
-                <!-- Placeholder -->
-                <div id="camera-placeholder"
-                    class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center align-items-center text-muted p-5 bg-dark">
-                    <i class="fs-1 mb-3 bi bi-record-circle text-danger"></i>
-                    <h4>Kamera Rekam Off</h4>
-                    <p>Silakan hubungkan kamera rekam di menu sebelah kiri</p>
-                </div>
-
-                <!-- Recording Overlay (Responsive) -->
-                <div id="recording-overlay"
-                    class="position-absolute top-0 start-0 w-100 p-2 bg-danger text-white d-flex flex-column flex-md-row justify-content-between align-items-center gap-2 d-none"
-                    style="z-index: 10;">
-                    <div class="d-flex align-items-center gap-2">
-                        <div class="spinner-grow spinner-grow-sm text-white" role="status"></div>
-                        <strong>SEDANG MEREKAM</strong>
-                    </div>
-                    <div class="font-monospace text-break small" id="rec-info">RESI...</div>
-                </div>
-
-                <!-- Zoom Controls -->
-                <div id="zoom-container" class="zoom-controls d-none">
-                    <button class="zoom-btn" onclick="adjustZoom(0.5)" title="Zoom In">
+                <!-- [ANTIGRAVITY] NEW: Scanner Zoom Controls -->
+                <div id="scan-zoom-container" class="zoom-controls d-none" style="bottom: 15px; right: 15px;">
+                    <button class="zoom-btn" onclick="adjustScanZoom(0.5)" title="Zoom In (Backend)">
                         <i class="bi bi-plus-lg"></i>
                     </button>
-                    <button class="zoom-btn" onclick="resetZoom()" title="Reset Zoom">
+                    <button class="zoom-btn" onclick="resetScanZoom()" title="Reset Zoom">
                         <i class="bi bi-aspect-ratio"></i>
                     </button>
-                    <button class="zoom-btn" onclick="adjustZoom(-0.5)" title="Zoom Out">
+                    <button class="zoom-btn" onclick="adjustScanZoom(-0.5)" title="Zoom Out (Backend)">
                         <i class="bi bi-dash-lg"></i>
                     </button>
                 </div>
-                <div id="zoom-indicator" class="zoom-info">Zoom: 1.0x</div>
-            </div>
+                <div id="scan-zoom-indicator" class="zoom-info" style="bottom: 70px;">Zoom: 1.0x</div>
 
-            <div class="card-footer">
-                <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
-                    <div id="status-message" class="text-muted text-center text-md-start mb-2 mb-md-0">Siap merekam...
-                    </div>
-                    <div class="d-flex gap-2 w-100 w-md-auto justify-content-center">
-                        <button id="btn-stop" class="btn btn-danger d-none flex-grow-1 flex-md-grow-0">
-                            <i class="bi bi-check-circle-fill me-1"></i> Selesai & Simpan
-                        </button>
-                        <button id="btn-cancel" class="btn btn-outline-secondary d-none flex-grow-1 flex-md-grow-0">
-                            <i class="bi bi-x-lg me-1"></i> Batal
-                        </button>
-                    </div>
-                </div>
             </div>
         </div>
 
-        <!-- Last Recording Info -->
-        <div class="card" id="last-recording-card" style="display: none;">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <div>
-                    <h6 class="text-success mb-1"><i class="bi bi-check-circle-fill me-1"></i> Rekaman Terakhir Disimpan
-                    </h6>
-                    <small id="last-record-detail" class="text-muted">RESI... • DURASI...</small>
+        <!-- [ANTIGRAVITY] NEW: Scan Card Footer with Actions -->
+        <div class="card-footer d-none" id="scan-card-footer">
+            <div class="d-flex gap-2 justify-content-center">
+                <button id="btn-stop-scan" class="btn btn-danger flex-grow-1" onclick="stopRecording()">
+                    <i class="bi bi-check-circle-fill me-1"></i> Selesai & Simpan
+                </button>
+                <button id="btn-cancel-scan" class="btn btn-outline-secondary flex-grow-1" onclick="cancelRecording()">
+                    <i class="bi bi-x-lg me-1"></i> Batal
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- BOTTOM: RECORDING PREVIEW -->
+    <div id="recording-card-container" class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5>3. Rekam Video (Bukti)</h5>
+            <div id="recording-timer" class="h4 mb-0 font-monospace d-none">00:00</div>
+        </div>
+
+        <div id="camera-container" class="card-body p-0 position-relative bg-dark text-center"
+            style="min-height: 480px; max-height: 550px; overflow: hidden; background-color: #000; position: relative; display: flex; align-items: center; justify-content: center;">
+            <!-- Camera Image -->
+            <img id="camera-feed" src="" class="img-fluid"
+                style="max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: none;">
+
+            <!-- Placeholder -->
+            <div id="camera-placeholder"
+                class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center align-items-center text-muted p-5 bg-dark">
+                <i class="fs-1 mb-3 bi bi-record-circle text-danger"></i>
+                <h4>Kamera Rekam Off</h4>
+                <p>Silakan hubungkan kamera rekam di menu sebelah kiri</p>
+            </div>
+
+            <!-- Recording Overlay (Responsive) -->
+            <div id="recording-overlay"
+                class="position-absolute top-0 start-0 w-100 p-2 bg-danger text-white d-flex flex-column flex-md-row justify-content-between align-items-center gap-2 d-none"
+                style="z-index: 10;">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="spinner-grow spinner-grow-sm text-white" role="status"></div>
+                    <strong>SEDANG MEREKAM</strong>
                 </div>
-                <div>
-                    <button class="btn btn-sm btn-outline-danger" onclick="redoRecording()">
-                        <i class="bi bi-arrow-clockwise me-1"></i> Redo (Rekam Ulang)
+                <div class="font-monospace text-break small" id="rec-info">RESI...</div>
+            </div>
+
+            <!-- Zoom Controls -->
+            <div id="zoom-container" class="zoom-controls d-none">
+                <button class="zoom-btn" onclick="adjustZoom(0.5)" title="Zoom In">
+                    <i class="bi bi-plus-lg"></i>
+                </button>
+                <button class="zoom-btn" onclick="resetZoom()" title="Reset Zoom">
+                    <i class="bi bi-aspect-ratio"></i>
+                </button>
+                <button class="zoom-btn" onclick="adjustZoom(-0.5)" title="Zoom Out">
+                    <i class="bi bi-dash-lg"></i>
+                </button>
+            </div>
+            <div id="zoom-indicator" class="zoom-info">Zoom: 1.0x</div>
+        </div>
+
+        <div class="card-footer">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
+                <div id="status-message" class="text-muted text-center text-md-start mb-2 mb-md-0">Siap merekam...
+                </div>
+                <div class="d-flex gap-2 w-100 w-md-auto justify-content-center">
+                    <button id="btn-stop" class="btn btn-danger d-none flex-grow-1 flex-md-grow-0">
+                        <i class="bi bi-check-circle-fill me-1"></i> Selesai & Simpan
                     </button>
-                    <button class="btn btn-sm text-white" id="btn-view-last" onclick="viewLastRecording()"
-                        style="background-color: #FF6B35;">
-                        <i class="bi bi-eye me-1"></i> Lihat
+                    <button id="btn-cancel" class="btn btn-outline-secondary d-none flex-grow-1 flex-md-grow-0">
+                        <i class="bi bi-x-lg me-1"></i> Batal
                     </button>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Last Recording Info -->
+    <div class="card" id="last-recording-card" style="display: none;">
+        <div class="card-body d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="text-success mb-1"><i class="bi bi-check-circle-fill me-1"></i> Rekaman Terakhir Disimpan
+                </h6>
+                <small id="last-record-detail" class="text-muted">RESI... • DURASI...</small>
+            </div>
+            <div>
+                <button class="btn btn-sm btn-outline-danger" onclick="redoRecording()">
+                    <i class="bi bi-arrow-clockwise me-1"></i> Redo (Rekam Ulang)
+                </button>
+                <button class="btn btn-sm text-white" id="btn-view-last" onclick="viewLastRecording()"
+                    style="background-color: #FF6B35;">
+                    <i class="bi bi-eye me-1"></i> Lihat
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 </div>
 
 <!-- FAB Navigation -->
@@ -577,7 +604,8 @@
     type="text/javascript"></script>
 <script>
     // Configuration
-    const SCAN_RATE = 700; // Barcode scan rate (ms) - quicker polling for easier detect
+    // [ANTIGRAVITY] OPTIMIZATION: Reduced from 700ms to 250ms for "Instant" feel
+    const SCAN_RATE = 100; // Barcode scan rate (ms) - quicker polling for easier detect
     const RECORDING_START_GRACE_PERIOD = 5000; // 5 seconds - don't stop immediately after start
     const BARCODE_COOLDOWN = 3000; // 3 seconds - cooldown between barcode detections
 
@@ -598,6 +626,7 @@
 
     // Scanner
     let html5QrCode = null; // Local scanner instance
+    let scanningZoomLevel = 1.0; // [ANTIGRAVITY] New state for scanner zoom
     let isLocalScanActive = false; // Flag for local scanner state
     let lastBarcodeDetectTime = 0; // For cooldown
     let scanVisualEl = null; // Green scanning overlay
@@ -1344,6 +1373,7 @@
         // 2. Baru switch
         scanningCameraUrl = url;
         localStorage.setItem('last_scan_camera_url', url); // SAVE PREFERENCE
+        resetScanZoom(); // [ANTIGRAVITY] Reset zoom when changing camera
 
         // RESET STATE (Ref: User request)
         resetScanningState();
@@ -1412,6 +1442,7 @@
         // Hide All Areas first
         document.getElementById('local-reader-area').classList.add('d-none');
         document.getElementById('backend-scan-area').classList.add('d-none');
+        document.getElementById('scan-zoom-container').classList.add('d-none');
 
         // Stop Backend Image feed
         const backendImg = document.getElementById('backend-scan-feed');
@@ -1546,6 +1577,8 @@
             // Show Backend Feed
             const backendArea = document.getElementById('backend-scan-area');
             backendArea.classList.remove('d-none');
+            // Show zoom controls
+            document.getElementById('scan-zoom-container').classList.remove('d-none');
             // Ensure container has relative styling for absolute positioning of loader if needed, 
             // and min-height to prevent zero-height collapse
             backendArea.style.position = 'relative';
@@ -2652,6 +2685,13 @@
 
                     document.getElementById('recording-timer').classList.remove('d-none');
 
+                    // [ANTIGRAVITY] Show Scan Buttons
+                    const scanFooter = document.getElementById('scan-card-footer');
+                    if (scanFooter) {
+                        scanFooter.classList.remove('d-none');
+                        scanFooter.classList.add('d-block'); // Ensure block display
+                    }
+
                     // Start Timer
                     startTimer();
 
@@ -2834,6 +2874,13 @@
         document.getElementById('btn-cancel')?.classList.add('d-none');
         document.getElementById('recording-timer')?.classList.add('d-none');
 
+        // [ANTIGRAVITY] Hide Scan Buttons
+        const scanFooter = document.getElementById('scan-card-footer');
+        if (scanFooter) {
+            scanFooter.classList.add('d-none');
+            scanFooter.classList.remove('d-block');
+        }
+
         // Stop timer
         if (timerInterval) {
             clearInterval(timerInterval);
@@ -2895,22 +2942,67 @@
     }
 
     function redoRecording() {
-        if (!lastRecordId) return;
-        if (!confirm('PERINGATAN: Rekaman sebelumnya akan DIHAPUS dan Anda akan merekam ulang resi yang sama. Lanjutkan?')) return;
+        console.log(">>> [Redo] Button Clicked. Last ID:", lastRecordId);
 
-        // Delete previous
-        fetch('/api/recording/cancel', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ recording_id: lastRecordId })
-        })
-            .then(res => res.json())
-            .then(() => {
-                document.getElementById('last-recording-card').style.display = 'none';
-                lastRecordId = null;
-                updateStatus('♻️ Siap rekam ulang. Silakan scan/input resi lagi.');
-                document.getElementById('resi-input').focus();
-            });
+        if (!lastRecordId) {
+            console.error(">>> [Redo] No lastRecordId found!");
+            Swal.fire('Error', 'Tidak ada data rekaman terakhir untuk di-undo.', 'error');
+            return;
+        }
+
+        // Confirm first
+        Swal.fire({
+            title: 'Rekam Ulang?',
+            text: "Rekaman sebelumnya akan DIHAPUS dan Anda akan merekam ulang resi yang sama.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Ya, Rekam Ulang',
+            cancelButtonText: 'Batal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                console.log(">>> [Redo] Confirmed. Sending cancel request...");
+
+                // Show loading
+                const btn = document.querySelector('button[onclick="redoRecording()"]');
+                const originalText = btn ? btn.innerHTML : 'Redo';
+                if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Hapus...';
+
+                // Delete previous
+                fetch('/api/recording/cancel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ recording_id: lastRecordId })
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        console.log(">>> [Redo] Cancel response:", data);
+
+                        document.getElementById('last-recording-card').style.display = 'none';
+                        lastRecordId = null; // Clear it to prevent double-redo
+
+                        // Reset UI feedback
+                        if (btn) btn.innerHTML = originalText;
+
+                        updateStatus('♻️ Siap rekam ulang. Silakan scan/input resi lagi.');
+
+                        // Focus input if in scanner mode
+                        const resiInput = document.getElementById('resi-input');
+                        if (resiInput) resiInput.focus();
+
+                        Toast.fire({
+                            icon: 'info',
+                            title: '♻️ Siap Rekam Ulang'
+                        });
+                    })
+                    .catch(err => {
+                        console.error(">>> [Redo] Error:", err);
+                        if (btn) btn.innerHTML = originalText;
+                        Swal.fire('Gagal', 'Terjadi kesalahan saat menghapus rekaman lama: ' + err.message, 'error');
+                    });
+            }
+        });
     }
 
     // Utils
@@ -3236,6 +3328,23 @@
         if (overlay && targetParent && overlay.parentElement !== targetParent) {
             targetParent.appendChild(overlay);
         }
+
+        // [ANTIGRAVITY] Dynamic Last Recording Card Relocation
+        // Ensure "Last Recording" card appears immediately below the active view
+        const lastRecCard = document.getElementById('last-recording-card');
+        if (lastRecCard) {
+            const scanCard = document.getElementById('scanning-card-container');
+            const recCard = document.getElementById('recording-card-container');
+
+            if (isSame && scanCard) {
+                // Merged Mode: Move Last Rec Card to be after Scan Card
+                // (This ensures it sits tight against the scan box, skipping the hidden Rec Card)
+                scanCard.parentNode.insertBefore(lastRecCard, scanCard.nextSibling);
+            } else if (!isSame && recCard) {
+                // Split Mode: Move Last Rec Card to be after Rec Card
+                recCard.parentNode.insertBefore(lastRecCard, recCard.nextSibling);
+            }
+        }
     }
 
     // 2. FPS Logic Override
@@ -3311,4 +3420,59 @@
 
 </script>
 <script src="{{ url_for('static', filename='js/modules/video_player.js') }}"></script>
+
+<script>
+    // [ANTIGRAVITY] NEW: Scanner Zoom Logic
+    function adjustScanZoom(delta) {
+        if (!scanningCameraUrl || scanningCameraUrl === 'manual') return;
+
+        let newZoom = scanningZoomLevel + delta;
+        // Clamp between 1.0 and 4.0
+        if (newZoom < 1.0) newZoom = 1.0;
+        if (newZoom > 4.0) newZoom = 4.0;
+
+        scanningZoomLevel = newZoom;
+        updateScanZoomDisplay();
+
+        console.log(`>>> [Scanner] Zooming to ${scanningZoomLevel}x on ${scanningCameraUrl}`);
+
+        fetch('/api/camera/zoom', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: scanningCameraUrl, level: scanningZoomLevel })
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) console.warn("Zoom failed:", data);
+            })
+            .catch(err => console.error("Zoom error:", err));
+    }
+
+    function resetScanZoom() {
+        scanningZoomLevel = 1.0;
+        updateScanZoomDisplay();
+
+        if (scanningCameraUrl && scanningCameraUrl !== 'manual' && !scanningCameraUrl.includes('client_device')) {
+            fetch('/api/camera/zoom', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: scanningCameraUrl, level: 1.0 })
+            }).catch(e => { });
+        }
+    }
+
+    function updateScanZoomDisplay() {
+        const indicator = document.getElementById('scan-zoom-indicator');
+        if (indicator) {
+            indicator.textContent = `Zoom: ${scanningZoomLevel.toFixed(1)}x`;
+            indicator.style.display = 'block';
+
+            // Auto hide
+            if (window.scanZoomTimeout) clearTimeout(window.scanZoomTimeout);
+            window.scanZoomTimeout = setTimeout(() => {
+                indicator.style.display = 'none';
+            }, 2000);
+        }
+    }
+</script>
 {% endblock %}
