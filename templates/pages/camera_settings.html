@@ -302,17 +302,17 @@
 
     .status-online {
         background: rgba(16, 185, 129, 0.2);
-        color: #10b981;
+        color: #10b981 !important;
     }
 
     .status-offline {
         background: rgba(239, 68, 68, 0.2);
-        color: #ef4444;
+        color: #ef4444 !important;
     }
 
     .status-checking {
         background: rgba(234, 179, 8, 0.2);
-        color: #eab308;
+        color: #eab308 !important;
     }
 
     .url-text {
@@ -416,51 +416,11 @@
 <script>
     // Global variables
     let cameras = [];
-    let initialCheckDone = false; // Flag to track first load
-
-    let cameraStatusInterval = null;
 
     // Load cameras on page load
     document.addEventListener('DOMContentLoaded', function () {
-        console.log('>>> [Camera Settings] Page loaded, starting background status checks');
+        console.log('>>> [Camera Settings] Page loaded');
         loadCameras();
-
-        // Start periodic status refresh while on this page (background, cached)
-        cameraStatusInterval = setInterval(() => {
-            refreshAllCameraStatuses();
-        }, 30000); // every 30s
-
-        // Stop background checks when leaving page
-        window.addEventListener('beforeunload', () => {
-            console.log('>>> [Camera Settings] Page unloading, stopping background checks');
-            if (cameraStatusInterval) {
-                clearInterval(cameraStatusInterval);
-                cameraStatusInterval = null;
-            }
-        });
-
-        // Pause/resume background checks based on page visibility
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                // Page is hidden (user switched tab/minimized)
-                console.log('>>> [Camera Settings] Page hidden, pausing background checks');
-                if (cameraStatusInterval) {
-                    clearInterval(cameraStatusInterval);
-                    cameraStatusInterval = null;
-                }
-            } else {
-                // Page is visible again
-                console.log('>>> [Camera Settings] Page visible, resuming background checks');
-                if (!cameraStatusInterval) {
-                    // Refresh immediately
-                    refreshAllCameraStatuses();
-                    // Then start interval
-                    cameraStatusInterval = setInterval(() => {
-                        refreshAllCameraStatuses();
-                    }, 30000); // every 30s
-                }
-            }
-        });
     });
 
     // Load camera list from API
@@ -490,8 +450,8 @@
         tbody.innerHTML = cameras.map((cam, idx) => `
         <tr data-id="${cam.id}">
             <td data-label="Status">
-                <span class="status-badge status-checking" id="status-${idx}">
-                    <i class="bi bi-hourglass-split me-1"></i> Mengecek...
+                <span class="status-badge" id="status-${idx}" style="background: rgba(100, 100, 100, 0.2); color: #888;">
+                    <i class="bi bi-dash-circle me-1"></i> -
                 </span>
             </td>
             <td data-label="Nama"><strong>${escapeHtml(cam.name)}</strong></td>
@@ -508,102 +468,38 @@
             </td>
         </tr>
     `).join('');
-
-        // Initial status load once table is rendered
-        refreshAllCameraStatuses();
     }
 
 
-    // ===========================================
-    // SMART QUEUE / CONCURRENCY CONTROL
-    // ===========================================
-    // We limit concurrency to 2 to prevent USB/Driver collision,
-    // but still faster than sequential. We also implement RETRY logic.
-
-    let isCheckingStatus = false;
-
-    function refreshAllCameraStatuses() {
-        if (!cameras || cameras.length === 0) return;
-        if (isCheckingStatus) return; // Prevent double trigger
-        isCheckingStatus = true;
-
-        console.log('>>> [Status] Starting SMART QUEUE check (Concurrency: 2)...');
-
-        // Create tasks with indices
-        const tasks = cameras.map((cam, index) => ({ cam, index }));
-
-        // Execute with concurrency limit
-        processQueue(tasks, 2).finally(() => {
-            isCheckingStatus = false;
-            initialCheckDone = true; // Mark first check as done
-            console.log('>>> [Status] All checks completed. Background mode active.');
-        });
-    }
-
-    // Queue Processor
-    async function processQueue(tasks, concurrency) {
-        const workers = new Array(concurrency).fill(Promise.resolve());
-
-        /* 
-           We map tasks to a chain. Each worker picks the next task 
-           from the iterator.
-        */
-        const iterator = tasks.entries(); // [index, task]
-
-        const worker = async () => {
-            for (const [_, task] of iterator) {
-                await checkCameraWithRetry(task.index, task.cam, false);
-            }
-        }
-
-        await Promise.all(workers.map(worker));
-    }
-
-    // Robust Check with Retry
-    async function checkCameraWithRetry(i, cam, forceFeedback = false) {
-        const badge = document.getElementById(`status-${i}`);
+    // Test camera from table - simple direct test
+    async function testCamera(idx) {
+        const cam = cameras[idx];
+        const badge = document.getElementById(`status-${idx}`);
         if (!badge) return;
 
-        // Set visual state ONLY if initialization or manual individual test
-        // (We suppress "Checking..." on background refreshes to avoid flicker)
-        if (!initialCheckDone || forceFeedback) {
-            badge.className = 'status-badge status-checking';
-            badge.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Mengecek...';
-        }
+        // Show checking state
+        badge.className = 'status-badge status-checking';
+        badge.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Mengecek...';
 
-        // Attepmt 1
-        let success = await performCheck(cam.url);
-
-        if (!success) {
-            // Wait 800ms and Retry ONCE (mimics user clicking again)
-            // This catches "Busy" states or driver initialization lag
-            console.log(`[Status] Camera ${i} failed first attempt. Retrying...`);
-            await new Promise(r => setTimeout(r, 800));
-            success = await performCheck(cam.url);
-        }
-
-        if (success) {
-            badge.className = 'status-badge status-online';
-            badge.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Online';
-        } else {
-            badge.className = 'status-badge status-offline';
-            badge.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> Offline';
-        }
-    }
-
-    // Single API Call wrapper
-    async function performCheck(url) {
         try {
             const response = await fetch('/api/cameras/test', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: url })
+                body: JSON.stringify({ url: cam.url })
             });
             const data = await response.json();
-            return data.success;
+
+            if (data.success) {
+                badge.className = 'status-badge status-online';
+                badge.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Online';
+            } else {
+                badge.className = 'status-badge status-offline';
+                badge.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> Offline';
+            }
         } catch (err) {
             console.error('Check error:', err);
-            return false;
+            badge.className = 'status-badge status-offline';
+            badge.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> Error';
         }
     }
 
@@ -840,11 +736,6 @@
             });
     }
 
-    // Test camera from table
-    function testCamera(idx) {
-        const cam = cameras[idx];
-        checkCameraWithRetry(idx, cam, true); // True = Force User Feedback
-    }
 
     // Delete camera
     function deleteCamera(idx) {
