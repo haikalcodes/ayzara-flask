@@ -711,6 +711,17 @@
         function attemptCameraConnection() {
             status.innerHTML = '<span class="text-info">🔵 Menghubungkan...</span>';
 
+            // [ANTIGRAVITY] Set high FPS for barcode scanning
+            fetch('/api/camera/mode', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                keepalive: true,
+                body: JSON.stringify({
+                    url: searchCameraUrl,
+                    mode: 'scan' // 20 FPS for better scanning
+                })
+            }).catch(e => console.log('Set mode failed', e));
+
             // Set source with timestamp to prevent caching
             img.src = `/video_feed?url=${encodeURIComponent(searchCameraUrl)}&t=${Date.now()}`;
 

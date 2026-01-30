@@ -48,6 +48,10 @@ if __name__ == '__main__':
 
     if os.path.exists(cert_path) and os.path.exists(key_path):
         logger.info(f"Loading SSL from {cert_path}...")
+        # Start Resource Monitor
+        from app.services.resource_monitor import start_resource_monitoring
+        start_resource_monitoring()
+        
         # Run with SSL Context
         socketio.run(app, 
                      host=host, 

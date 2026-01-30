@@ -402,16 +402,16 @@
     }
 
     // [ANTIGRAVITY] ADDED PAGE CLEANUP
-    window.addEventListener('beforeunload', function() {
+    window.addEventListener('beforeunload', function () {
         if (selectedCameraUrl && selectedCameraUrl !== 'local_client_device') {
             const data = JSON.stringify({ url: selectedCameraUrl });
             if (navigator.sendBeacon) {
-                const blob = new Blob([data], {type: 'application/json'});
+                const blob = new Blob([data], { type: 'application/json' });
                 navigator.sendBeacon('/api/camera/release', blob);
             } else {
                 fetch('/api/camera/release', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     keepalive: true,
                     body: data
                 });
@@ -443,6 +443,19 @@
     }
 
     function startPreview() {
+        // [ANTIGRAVITY] Set high FPS for smooth preview
+        if (selectedCameraUrl && selectedCameraUrl !== 'local_client_device') {
+            fetch('/api/camera/mode', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                keepalive: true,
+                body: JSON.stringify({
+                    url: selectedCameraUrl,
+                    mode: 'scan' // 20 FPS for smooth preview
+                })
+            }).catch(e => console.log('Set mode failed', e));
+        }
+
         // Clear any existing health check
         if (healthCheckInterval) clearInterval(healthCheckInterval);
 

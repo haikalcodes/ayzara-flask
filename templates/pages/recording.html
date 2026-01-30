@@ -844,13 +844,22 @@
     }
 
     // Helper: update camera usage purpose on server (preview/scan/record)
-    function updateCameraUsage(purpose) {
-        if (!selectedCameraUrl || !purpose) return;
-        fetch('/api/camera/usage', {
+    function updateCameraUsage(purpose, specificUrl = null) {
+        // Use specific URL if provided, otherwise default to selected (recorder)
+        const targetUrl = specificUrl || selectedCameraUrl;
+
+        if (!targetUrl || !purpose) return;
+
+        console.log(`>>> [Mode] Setting ${purpose} for ${targetUrl}`);
+
+        fetch('/api/camera/mode', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: selectedCameraUrl, purpose: purpose })
-        }).catch(e => console.log('updateCameraUsage failed', e));
+            body: JSON.stringify({ url: targetUrl, mode: purpose })
+        }).catch(e => console.log('updateCameraMode failed', e));
+
+        // Also call legacy usage endpoint for compatibility if needed
+        // fetch('/api/camera/usage', ... 
     }
 
     // Getter alias for backward compatibility code
@@ -1213,6 +1222,9 @@
             return;
         }
 
+        // 1. Set Mode to RECORD (High FPS)
+        updateCameraUsage('record', recordingCameraUrl);
+
         // CRITICAL FIX: Stop preview first to clear cache and reset state
         stopPreview();
 
@@ -1462,7 +1474,7 @@
                     if (indicator) indicator.innerHTML = '<span class="text-primary">Silakan scan resi...</span>';
                     updateStatus(`Platform ${selectedPlatform} aktif. Silakan scan resi.`);
                     if (scanningCameraUrl && scanningCameraUrl !== 'local_client_device') {
-                        updateCameraUsage('scan');
+                        updateCameraUsage('scan', scanningCameraUrl);
                     }
                 }
             };
@@ -1855,6 +1867,9 @@
 
         // Set stream source with cache buster
         img.src = `/video_feed?url=${encodeURIComponent(recordingCameraUrl)}&t=${new Date().getTime()}`;
+
+        // Set mode to PREVIEW by default when starting camera
+        updateCameraUsage('preview', recordingCameraUrl);
 
         // START HEARTBEAT
         startHeartbeat(recordingCameraUrl);
@@ -2429,6 +2444,9 @@
     function startRecording(resi, platform) {
         updateStatus('⏳ Memulai rekaman...');
 
+        // Force RECORD mode (High FPS)
+        updateCameraUsage('record');
+
         fetch('/api/recording/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2640,6 +2658,9 @@
             clearInterval(timerInterval);
             timerInterval = null;
         }
+
+        // Restore PREVIEW mode (Low FPS)
+        updateCameraUsage('preview');
     }
 
     function cancelRecording() {

@@ -12,6 +12,7 @@ import { updateRecordingStatus } from './modules/stats.js';
 // Import and expose camera functions
 import './modules/camera.js';
 import './modules/pegawai.js';
+import { initResourceMonitor } from './modules/monitor.js';
 
 // ============================================
 // POLLING FOR UPDATES (fallback if WebSocket fails)
@@ -54,6 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Try WebSocket first, fallback to polling
     try {
         initSocket();
+        initResourceMonitor(); // Initialize resource monitor
 
         // Register status update handler
         onStatusUpdate((data) => {

@@ -36,6 +36,69 @@
     </div>
 </div>
 
+<!-- Resource Monitoring Widget (Admin Only) -->
+{% if current_user.role == 'admin' %}
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0"><i class="bi bi-speedometer2 me-2"></i>Resource Monitor</h5>
+                <span class="badge bg-success" id="monitor-status">Live</span>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <!-- RAM Usage -->
+                    <div class="col-md-4">
+                        <div class="resource-item">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="resource-label"><i class="bi bi-memory me-2"></i>RAM</span>
+                                <span class="resource-value" id="ram-percent">--%</span>
+                            </div>
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar" id="ram-bar" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <small class="text-muted mt-1 d-block" id="ram-detail">-- / -- GB</small>
+                        </div>
+                    </div>
+
+                    <!-- CPU Usage -->
+                    <div class="col-md-4">
+                        <div class="resource-item">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="resource-label"><i class="bi bi-cpu me-2"></i>CPU</span>
+                                <span class="resource-value" id="cpu-percent">--%</span>
+                            </div>
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar bg-info" id="cpu-bar" role="progressbar" style="width: 0%">
+                                </div>
+                            </div>
+                            <small class="text-muted mt-1 d-block" id="cpu-detail">-- cores</small>
+                        </div>
+                    </div>
+
+                    <!-- Disk Usage -->
+                    <div class="col-md-4">
+                        <div class="resource-item">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="resource-label"><i class="bi bi-hdd me-2"></i>Disk</span>
+                                <span class="resource-value" id="disk-percent">--%</span>
+                            </div>
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar bg-warning" id="disk-bar" role="progressbar" style="width: 0%">
+                                </div>
+                            </div>
+                            <small class="text-muted mt-1 d-block" id="disk-detail">-- / -- GB</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Active Resources -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Recording Status -->
 <div class="row g-4 mb-4">
     <div class="col-md-4">
@@ -147,8 +210,53 @@
     </div>
 </div>
 
-<!-- Info Banner -->
 <div class="alert alert-info mt-4" style="display: none;" role="alert">
     <i class="bi bi-info-circle me-2"></i>
 </div>
+
+{% if current_user.role == 'admin' %}
+<style>
+    .resource-item {
+        padding: 15px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+    }
+
+    .resource-label {
+        font-weight: 600;
+        font-size: 14px;
+    }
+
+    .resource-value {
+        font-weight: 700;
+        font-size: 18px;
+    }
+
+    .progress {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+    }
+
+    .progress-bar {
+        transition: width 0.5s ease, background-color 0.3s ease;
+    }
+
+    #monitor-status {
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+
+        0%,
+        100% {
+            opacity: 1;
+        }
+
+        50% {
+            opacity: 0.6;
+        }
+    }
+</style>
+
+{% endif %}
 {% endblock %}

@@ -1,41 +1,24 @@
 /**
  * Socket.IO Module
  * =================
- * Handles WebSocket connections and real-time updates
+ * Handles WebSocket connection and event listeners
  */
 
 let socket;
+let statusUpdateCallbacks = [];
 
-/**
- * Initialize Socket.IO connection
- */
 export function initSocket() {
-    console.log('[SocketIO] Initializing socket connection...');
-    window.socket = io({
-        transports: ['websocket', 'polling'],
-        upgrade: true,
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionAttempts: 10
-    });
-    socket = window.socket;
+    // Initialize SocketIO
+    if (typeof io === 'undefined') {
+        throw new Error('Socket.IO library not loaded');
+    }
 
-    socket.on('connect', () => {
-        console.log('[SocketIO] Connected successfully! Socket ID:', socket.id);
-        socket.emit('request_status');
-    });
+    if (!socket) {
+        socket = io();
+        window.socket = socket; // Expose to global scope for legacy scripts
 
-    socket.on('reconnect', (attemptNumber) => {
-        console.log('[SocketIO] Reconnected after', attemptNumber, 'attempts');
-    });
-
-    socket.on('reconnect_attempt', (attemptNumber) => {
-        console.log('[SocketIO] Reconnection attempt', attemptNumber);
-    });
-
-    socket.on('reconnect_error', (error) => {
-        console.error('[SocketIO] Reconnection error:', error);
-    });
+        console.log('[SocketIO] Initialized');
+    }
 
     // Debug: Log all emits
     const originalEmit = socket.emit;
@@ -45,6 +28,10 @@ export function initSocket() {
         }
         return originalEmit.apply(this, arguments);
     };
+
+    socket.on('connect', () => {
+        console.log('[SocketIO] Connected with ID:', socket.id);
+    });
 
     socket.on('disconnect', (reason) => {
         console.log('[SocketIO] Disconnected. Reason:', reason);

@@ -442,6 +442,30 @@ def api_camera_heartbeat():
         return jsonify({'success': False}), 500
 
 
+@camera_bp.route('/api/camera/mode', methods=['POST'])
+@login_required
+def api_camera_mode():
+    """Set camera usage mode for performance optimization"""
+    data = request.get_json()
+    camera_url = data.get('url')
+    mode = data.get('mode', 'preview')  # preview, scan, record
+    
+    if not camera_url:
+        return jsonify({'success': False, 'error': 'No camera URL'}), 400
+    
+    # Get camera instance
+    camera = get_camera_stream(camera_url)
+    if camera:
+        camera.set_usage_mode(mode)
+        return jsonify({
+            'success': True,
+            'mode': mode,
+            'target_fps': camera.target_fps
+        })
+    else:
+        return jsonify({'success': False, 'error': 'Camera not found'}), 404
+
+
 # ============================================
 # CAMERA MANAGEMENT API
 # ============================================

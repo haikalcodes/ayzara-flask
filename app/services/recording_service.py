@@ -128,7 +128,7 @@ class RecordingService:
                 return
 
             h, w = frame.shape[:2]
-            fps = 20.0
+            fps = 30.0  # MATCH CAMERA FPS for 1:1 capture
             
             # MJPEG Writer (100% reliable in OpenCV)
             fourcc = cv2.VideoWriter_fourcc(*'MJPG')
@@ -146,20 +146,21 @@ class RecordingService:
             
             try:
                 while not stop_event.is_set():
+                    # SYNC STRATEGY: Poll faster than FPS, write only new frames
                     current_ts = camera.last_update
+                    
                     if current_ts > last_ts:
                         frame = camera.get_raw_frame()
                         if frame is not None:
                             out.write(frame)
                             last_ts = current_ts
                             frames_written += 1
-                            # if frames_written % 30 == 0:
-                            #     print(f"[Recording] {recording_id}: Written {frames_written} frames")
-                            time.sleep(1.0/fps)
-                        else:
-                            time.sleep(0.01)
+                            # Burst protection: If we write a frame, don't sleep essentially, 
+                            # just yield to let other threads run
+                            time.sleep(0.001) 
                     else:
-                        time.sleep(0.005)
+                        # Wait for new frame (poll)
+                        time.sleep(0.005) # 5ms poll is fast enough for 30fps (33ms)
             except Exception as e:
                 print(f"[Recording] ❌ Loop error: {e}")
             finally:
@@ -174,42 +175,68 @@ class RecordingService:
             if os.path.exists(temp_path) and frames_written > 0:
                 print(f"[Recording] Converting to H.264 MP4: {output_path}")
                 
-                # FFmpeg command with optimized compression and compatibility
-                # CRF 23 = Good quality/size balance
-                # preset medium = Balanced speed
-                # pix_fmt yuv420p = REQUIRED for browser playback
-                # scale filter = REQUIRED for H.264 (dimensions must be divisible by 2)
+                # FFmpeg command - OPTIMIZED for speed and lower resource usage
+                # CRF 26 = Good quality, smaller files (was 23)
+                # preset veryfast = 3x faster encoding (was medium)
+                # threads 2 = Limit CPU usage
+                # max_muxing_queue_size = Prevent buffer overflow
                 cmd = [
                     'ffmpeg', '-y',
                     '-i', temp_path,
-                    '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', # Force even dimensions
+                    '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',  # Force even dimensions
                     '-c:v', 'libx264',
-                    '-preset', 'medium',
-                    '-crf', '23',
+                    '-preset', 'veryfast',  # Faster encoding
+                    '-crf', '26',  # Lower quality = smaller files, still good
                     '-pix_fmt', 'yuv420p',
                     '-movflags', '+faststart',
+                    '-threads', '2',  # Limit CPU usage
+                    '-max_muxing_queue_size', '1024',  # Prevent buffer overflow
                     output_path
                 ]
                 
                 print(f"[Recording] Running FFmpeg: {' '.join(cmd)}")
 
-                # Run FFmpeg
-                process = subprocess.run(
-                    cmd, 
-                    stdout=subprocess.PIPE, 
-                    stderr=subprocess.PIPE,
-                    timeout=60  # 60 second timeout
-                )
+                # Run FFmpeg with lower priority (Windows)
+                import sys
+                if sys.platform == 'win32':
+                    process = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        creationflags=subprocess.BELOW_NORMAL_PRIORITY_CLASS
+                    )
+                else:
+                    process = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    )
                 
-                if process.returncode == 0:
+                # Wait 0.5s for FFmpeg to open the file
+                time.sleep(0.5)
+                
+                # Delete temp file EARLY while FFmpeg is reading it
+                # FFmpeg keeps file handle open, so it can still read
+                try:
+                    os.remove(temp_path)
+                    print(f"[Recording] ✅ Temp file deleted early (FFmpeg still reading)")
+                except Exception as e:
+                    print(f"[Recording] Temp file locked by FFmpeg: {e}")
+                
+                # Wait for FFmpeg to finish
+                stdout, stderr = process.communicate(timeout=60)
+                returncode = process.returncode
+                
+                if returncode == 0:
                     print(f"[Recording] ✅ Conversion SUCCESS!")
                     
-                    # Remove temp file
-                    try:
-                        os.remove(temp_path)
-                        print(f"[Recording] Temp file removed: {temp_path}")
-                    except Exception as e:
-                        print(f"[Recording] Warning: Could not remove temp file: {e}")
+                    # Final cleanup if temp file still exists
+                    if os.path.exists(temp_path):
+                        try:
+                            os.remove(temp_path)
+                            print(f"[Recording] Final cleanup: Removed temp file")
+                        except:
+                            pass
                     
                     # Verify final file
                     if os.path.exists(output_path):
@@ -218,7 +245,7 @@ class RecordingService:
                     else:
                         print(f"[Recording] ❌ Final file missing after conversion!")
                 else:
-                    error_msg = process.stderr.decode('utf-8', errors='ignore')
+                    error_msg = stderr.decode('utf-8', errors='ignore')
                     print(f"[Recording] ❌ FFmpeg conversion FAILED!")
                     print(f"[Recording] Command: {' '.join(cmd)}")
                     print(f"[Recording] Error Output:\n{error_msg}")

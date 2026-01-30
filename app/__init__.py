@@ -102,17 +102,11 @@ def create_app(config_object=config):
         )
         return jsonify({"success": False, "error": "Internal Server Error"}), 500
 
+    # Cleanup orphaned temp files from previous runs
+    cleanup_orphaned_temp_files()
+    
     # Start Resource Monitor (Background Thread)
-    # Ensure it only runs once (check if thread matches name)
-    already_running = False
-    for t in threading.enumerate():
-        if t.name == "ResourceMonitor":
-            already_running = True
-            break
-            
-    if not already_running:
-        start_resource_monitor()
-        print("[Monitor] Resource monitoring thread started")
+    start_resource_monitoring_service()
     
     # Register blueprints
     register_blueprints(app)
@@ -200,3 +194,35 @@ def check_and_migrate_db(app):
         # Table might not exist yet
         pass
 
+
+def cleanup_orphaned_temp_files():
+    """Clean up .avi temp files from previous runs"""
+    import glob
+    from pathlib import Path
+    
+    try:
+        recordings_folder = Path(config.RECORDINGS_FOLDER)
+        temp_files = list(recordings_folder.glob("*.avi"))
+        
+        if temp_files:
+            print(f"[Cleanup] Found {len(temp_files)} orphaned temp files")
+            for temp_file in temp_files:
+                try:
+                    temp_file.unlink()
+                    print(f"[Cleanup] Deleted: {temp_file.name}")
+                except Exception as e:
+                    print(f"[Cleanup] Could not delete {temp_file.name}: {e}")
+        else:
+            print("[Cleanup] No orphaned temp files found")
+    except Exception as e:
+        print(f"[Cleanup] Error during cleanup: {e}")
+
+
+def start_resource_monitoring_service():
+    """Start the resource monitoring service"""
+    try:
+        from app.services.resource_monitor import start_resource_monitoring
+        start_resource_monitoring()
+        print("[ResourceMonitor] Service started")
+    except Exception as e:
+        print(f"[ResourceMonitor] Failed to start: {e}")

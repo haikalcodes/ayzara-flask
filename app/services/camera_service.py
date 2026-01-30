@@ -69,6 +69,10 @@ class VideoCamera:
         self.zoom_level = 1.0  # 1.0 = no zoom, 2.0 = 2x zoom
         self.last_heartbeat = time.time()  # Initialize heartbeat
         
+        # Adaptive FPS for CPU optimization
+        self.usage_mode = 'preview'  # 'preview', 'scan', 'record'
+        self.target_fps = 10  # Default low FPS for preview
+        
         # Determine backend
         is_local = str(url).isdigit()
         
@@ -170,6 +174,24 @@ class VideoCamera:
                 pass
             self.cap = None
     
+    def set_usage_mode(self, mode):
+        """
+        Set camera usage mode to adjust performance
+        
+        Args:
+            mode: 'preview', 'scan', or 'record'
+        """
+        self.usage_mode = mode
+        
+        if mode == 'preview':
+            self.target_fps = 10  # Medium-Low FPS for preview (Prevent lag feeling)
+        elif mode == 'scan':
+            self.target_fps = 20  # Medium-High FPS for scanning
+        elif mode == 'record':
+            self.target_fps = 30  # High FPS for recording (Smooth)
+        
+        print(f"[Camera {self.url}] Mode: {mode}, Target FPS: {self.target_fps}")
+    
     def update(self):
         """Background thread to continuously read frames"""
         # Local import to avoid circular dependency
@@ -177,14 +199,23 @@ class VideoCamera:
         
         # Rate limit error reporting
         last_error_emit = 0
+        last_frame_time = 0
         
         while self.running:
             if self.cap and self.cap.isOpened():
+                # FPS throttling based on usage mode
+                current_time = time.time()
+                frame_interval = 1.0 / self.target_fps
+                
+                if current_time - last_frame_time < frame_interval:
+                    # Too soon, skip this iteration
+                    time.sleep(0.01)
+                    continue
+                
                 ret, frame = self.cap.read()
                 
                 if ret:
                     # Apply zoom if needed
-                    # (Zoom logic omitted for brevity, keeping existing if possible or re-inserting)
                     if self.zoom_level > 1.0:
                         h, w = frame.shape[:2]
                         crop_w = int(w / self.zoom_level)
@@ -198,6 +229,7 @@ class VideoCamera:
                         self.last_frame = frame
                         self.last_update = time.time()
                         self.consecutive_errors = 0
+                        last_frame_time = current_time
                 else:
                     self.consecutive_errors += 1
                     # If we have consecutive errors for > 1 second (approx 10 frames at 0.1s sleep)
@@ -233,7 +265,17 @@ class VideoCamera:
                 return None
             
             self.last_access = time.time()
-            ret, jpeg = cv2.imencode('.jpg', self.last_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            
+            # Adaptive quality based on usage mode
+            if self.usage_mode == 'preview':
+                quality = 60  # Low quality for preview
+                # Downscale for preview (half resolution)
+                h, w = self.last_frame.shape[:2]
+                preview_frame = cv2.resize(self.last_frame, (w//2, h//2))
+                ret, jpeg = cv2.imencode('.jpg', preview_frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
+            else:
+                quality = 85  # High quality for scan/record
+                ret, jpeg = cv2.imencode('.jpg', self.last_frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
             
             if ret:
                 return jpeg.tobytes()
