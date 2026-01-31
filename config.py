@@ -69,5 +69,51 @@ APP_AUTHOR = "AYZARA COLLECTIONS"
 BRAND_NAME = "AYZARA"
 
 # Create directories if not exist
+# [ANTIGRAVITY] SMART STORAGE LOCATION
+# Auto-detect largest drive for storage
+try:
+    import psutil
+    
+    # Get all disk partitions
+    partitions = psutil.disk_partitions()
+    largest_drive = None
+    max_size = 0
+    
+    for p in partitions:
+        try:
+            # Only check fixed/removable drives (skip cdrom, ramdisk, etc if possible)
+            if 'fixed' in p.opts or 'rw' in p.opts:
+                usage = psutil.disk_usage(p.mountpoint)
+                # Compare total size
+                if usage.total > max_size:
+                    max_size = usage.total
+                    largest_drive = p.mountpoint
+        except:
+            continue
+            
+    if largest_drive:
+        # Normalize path
+        STORAGE_ROOT = Path(largest_drive) / "AyzaraData"
+        print(f"[Config] Selected Largest Drive for Storage: {largest_drive} ({max_size/1e9:.1f} GB)")
+    else:
+        # Fallback
+        STORAGE_ROOT = BASE_DIR
+        print(f"[Config] Using Default Storage: {BASE_DIR}")
+
+except Exception as e:
+    print(f"[Config] Drive detection failed: {e}")
+    STORAGE_ROOT = BASE_DIR
+
+# Redefine folders using STORAGE_ROOT
+RECORDINGS_FOLDER = STORAGE_ROOT / "recordings"
+UPLOAD_FOLDER = STORAGE_ROOT / "uploads"
+PHOTOS_FOLDER = UPLOAD_FOLDER / "photos"
+THUMBNAILS_FOLDER = UPLOAD_FOLDER / "thumbnails"
+
+# Create directories if not exist
 for folder in [UPLOAD_FOLDER, PHOTOS_FOLDER, THUMBNAILS_FOLDER, RECORDINGS_FOLDER]:
-    folder.mkdir(parents=True, exist_ok=True)
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        # print(f"[Config] Verified folder: {folder}")
+    except Exception as e:
+        print(f"[Config] Error creating folder {folder}: {e}")

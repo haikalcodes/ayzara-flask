@@ -413,18 +413,9 @@ class RecordingService:
                 import config
                 from pathlib import Path
                 
-                if video_path_abs:
-                    try:
-                        abs_path = Path(video_path_abs)
-                        base_path = Path(config.RECORDINGS_FOLDER)
-                        video_path_rel = abs_path.relative_to(base_path)
-                        video_path_str = str(video_path_rel).replace('\\', '/')
-                        print(f"[Recording] Path: {video_path_abs} -> {video_path_str}")
-                    except Exception as e:
-                        print(f"[Recording] Path conversion failed: {e}")
-                        video_path_str = video_path_abs
-                else:
-                    video_path_str = None
+                # [ANTIGRAVITY] ABSOLUTE PATH STORAGE
+                # Store full path to ensure files are found even if storage config changes drives
+                video_path_str = video_path_abs.replace('\\', '/') if video_path_abs else None
                 
                 # Check if file exists
                 if video_path_abs and os.path.exists(video_path_abs):
@@ -444,11 +435,8 @@ class RecordingService:
                         json_path_abs, file_hash = generate_metadata_json(
                             record.to_dict(), video_path_abs, record.durasi_detik, record.file_size_kb
                         )
-                        try:
-                            json_rel = Path(json_path_abs).relative_to(base_path)
-                            json_path_str = str(json_rel).replace('\\', '/')
-                        except:
-                            json_path_str = json_path_abs
+                        # Store absolute path for metadata too
+                        json_path_str = json_path_abs.replace('\\', '/')
                             
                         record.json_metadata_path = json_path_str
                         record.sha256_hash = file_hash

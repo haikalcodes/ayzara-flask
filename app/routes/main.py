@@ -284,6 +284,30 @@ def serve_thumbnails(filename):
 
 @main_bp.route('/recordings/<path:filename>')
 def serve_recordings(filename):
-    """Serve video recordings"""
-    return send_from_directory(config.RECORDINGS_FOLDER, filename)
+    """Serve video recordings (Hybrid Absolute/Relative)"""
+    import os
+    from flask import send_file
+    
+    # 1. Try Absolute Path (Cross-Drive Support)
+    # Browser might send "D:/Folder/file.mp4"
+    if ':' in filename or filename.startswith('/'):
+        # Normalize slashes
+        clean_path = filename.replace('/', os.sep).replace('\\', os.sep)
+        
+        if os.path.exists(clean_path) and os.path.isfile(clean_path):
+            # Security Check: Ensure permitted extensions
+            allowed_exts = ('.mp4', '.avi', '.jpg', '.png', '.json')
+            if clean_path.lower().endswith(allowed_exts):
+                return send_file(clean_path)
+    
+    # 2. Try Relative to RECORDINGS_FOLDER (Standard)
+    # Also catch case where filename might be "recordings/video.mp4" relative to project
+    try:
+        return send_from_directory(config.RECORDINGS_FOLDER, filename)
+    except:
+        # 3. Last Resort: Try relative to BASE_DIR (Old legacy paths)
+        try:
+             return send_from_directory(config.BASE_DIR, filename)
+        except:
+             return "File not found", 404
 
