@@ -20,6 +20,13 @@ import platform
 import numpy as np
 from app.utils.logger import video_logger
 
+# [ANTIGRAVITY] GEVENT THREADPOOL
+# OpenCV calls are blocking C-functions that don't yield in Gevent.
+# We must run them in a real threadpool to keep the server responsive.
+import gevent
+from gevent.threadpool import ThreadPool
+_gevent_pool = ThreadPool(20) # Dedicate 20 real threads for camera I/O
+
 
 # ============================================
 # HARDWARE LOCK MANAGEMENT
@@ -71,7 +78,7 @@ class VideoCamera:
         
         # Adaptive FPS for CPU optimization
         self.usage_mode = 'preview'  # 'preview', 'scan', 'record'
-        self.target_fps = 10  # Default low FPS for preview
+        self.target_fps = 30  # Default to 30 FPS for responsiveness
         
         # Determine backend
         is_local = str(url).isdigit()
@@ -130,7 +137,7 @@ class VideoCamera:
         self.usage_mode = mode
         
         if mode == 'preview':
-            self.target_fps = 10  # Medium-Low FPS for preview (Prevent lag feeling)
+            self.target_fps = 30  # High FPS for preview (Same as scan)
         elif mode == 'scan':
             self.target_fps = 30# Medium-High FPS for scanning (Increased for dual-camera responsiveness)
         elif mode == 'record':
@@ -222,7 +229,14 @@ class VideoCamera:
                     time.sleep(0.01)
                     continue
                 
-                ret, frame = self.cap.read()
+                # [ANTIGRAVITY] OFFLOAD BLOCKING READ
+                # ret, frame = self.cap.read()
+                try:
+                    # Run blocking cv2.read() in threadpool
+                    ret, frame = _gevent_pool.apply(self.cap.read)
+                except Exception as e:
+                    print(f"[{self.url}] Read error: {e}")
+                    ret, frame = False, None
                 
                 if ret:
                     # Apply zoom if needed

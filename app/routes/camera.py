@@ -14,6 +14,9 @@ from app.services.camera_service import (
     status_cache_lock
 )
 import config
+import gevent
+from gevent.threadpool import ThreadPool
+_camera_test_pool = ThreadPool(5)
 
 camera_bp = Blueprint('camera', __name__)
 
@@ -686,33 +689,31 @@ def api_cameras_test():
                         try:
                             cap = cv2.VideoCapture(v_src, backend)
                             if cap and cap.isOpened():
-                                # Validate frames (same logic as VideoCamera.__init__)
-                                valid_frame_found = False
-                                prev_frame = None
+                                # [ANTIGRAVITY] Run validation loop in threadpool
+                                def _validate_cam(cap_ref):
+                                    valid = False
+                                    prev = None
+                                    for _ in range(5):
+                                        ret, f = cap_ref.read()
+                                        if ret and f is not None and f.size > 0:
+                                            h, w = f.shape[:2]
+                                            if h < 10 or w < 10: 
+                                                time.sleep(0.1)
+                                                continue
+                                            
+                                            # Simple frame check
+                                            if prev is not None:
+                                                 valid = True
+                                                 break
+                                            prev = f.copy()
+                                        time.sleep(0.1)
+                                    return valid
                                 
-                                for attempt in range(5):  # Try 5 frames
-                                    ret, frame = cap.read()
-                                    if ret and frame is not None and frame.size > 0:
-                                        h, w = frame.shape[:2]
-                                        if h < 10 or w < 10:
-                                            time.sleep(0.1)
-                                            continue
-                                        
-                                        mean_val = frame.mean()
-                                        if mean_val < 5 or mean_val > 250:
-                                            time.sleep(0.1)
-                                            continue
-                                        
-                                        if prev_frame is not None:
-                                            diff = cv2.absdiff(frame, prev_frame)
-                                            diff_mean = diff.mean()
-                                            if 0.5 < diff_mean < 100:
-                                                valid_frame_found = True
-                                                break
-                                        
-                                        prev_frame = frame.copy()
-                                    time.sleep(0.1)
-                                
+                                try:
+                                    valid_frame_found = _camera_test_pool.apply(_validate_cam, (cap,))
+                                except:
+                                    valid_frame_found = False
+
                                 if valid_frame_found:
                                     success = True
                                     cap.release()

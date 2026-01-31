@@ -446,6 +446,9 @@
     type="text/javascript"></script>
 <script>
     // Barcode Search Variables
+    // [ANTIGRAVITY] SCAN_RATE: 250ms for optimal polling
+    const SCAN_RATE = 100;
+
     let searchCameraUrl = '';
     let barcodeSearchInterval = null;
     let isSearching = false;
@@ -893,7 +896,7 @@
     function startBarcodeSearchLoop() {
         if (!window.socket || !window.socket.connected) {
             console.warn('Socket not ready, retrying...');
-            barcodeSearchInterval = setTimeout(startBarcodeSearchLoop, 500);
+            barcodeSearchInterval = setTimeout(startBarcodeSearchLoop, SCAN_RATE);
             return;
         }
 
@@ -931,9 +934,9 @@
         const detectBarcode = () => {
             if (!isSearching || !searchCameraUrl) return;
 
-            // [ANTIGRAVITY] OPTIMIZATION: 100ms (Turbo Mode) as requested
+            // [ANTIGRAVITY] OPTIMIZATION: SCAN_RATE (Turbo Mode) as requested
             socket.emit('detect_barcode', { url: searchCameraUrl });
-            barcodeSearchInterval = setTimeout(detectBarcode, 100);
+            barcodeSearchInterval = setTimeout(detectBarcode, SCAN_RATE);
         };
 
         detectBarcode();

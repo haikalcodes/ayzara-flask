@@ -16,6 +16,11 @@ import cv2
 import subprocess
 from app.utils.logger import video_logger, audit_logger, get_trace_id
 
+# [ANTIGRAVITY] GEVENT THREADPOOL
+import gevent
+from gevent.threadpool import ThreadPool
+_rec_pool = ThreadPool(10) # 10 threads for recording writes
+
 
 # ============================================
 # RECORDING STATE MANAGEMENT
@@ -152,7 +157,10 @@ class RecordingService:
                     if current_ts > last_ts:
                         frame = camera.get_raw_frame()
                         if frame is not None:
-                            out.write(frame)
+                            # [ANTIGRAVITY] OFFLOAD BLOCKING WRITE
+                            # out.write(frame)
+                            _rec_pool.apply(out.write, (frame,))
+                            
                             last_ts = current_ts
                             frames_written += 1
                             # Burst protection: If we write a frame, don't sleep essentially, 
@@ -280,10 +288,16 @@ class RecordingService:
         Returns:
             Tuple of (success, message, recording_id)
         """
-        # Check if there's already an active recording
-        active = self.get_active_recording()
-        if active:
-            return False, "Ada rekaman yang sedang berjalan", None
+        # Check if THIS CAMERA is already recording
+        with recording_lock:
+            for rid, info in active_recordings.items():
+                # Normalize to string for comparison (user might send int 0 or str "0")
+                if str(info.get('camera_url')) == str(camera_url):
+                    return False, f"Kamera {camera_url} sedang digunakan untuk merekam", None
+        
+        # [ANTIGRAVITY] ALLOW MULTIPLE RECORDINGS
+        # We removed the global self.get_active_recording() check here.
+
         
         try:
             # Create database record

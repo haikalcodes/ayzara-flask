@@ -5,6 +5,7 @@ Configuration untuk AYZARA Dashboard Flask
 """
 
 import os
+import json
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -56,7 +57,14 @@ ITEMS_PER_PAGE = 12
 
 # App info
 APP_NAME = "AYZARA Dashboard"
-APP_VERSION = "2.0.0"
+# APP_VERSION will be loaded from config.json below
+try:
+    with open(CONFIG_FILE, 'r') as f:
+        config_data = json.load(f)
+        APP_VERSION = config_data.get('app_version', '1.0.0')
+except Exception as e:
+    APP_VERSION = "1.0.0"
+
 APP_AUTHOR = "AYZARA COLLECTIONS"
 BRAND_NAME = "AYZARA"
 

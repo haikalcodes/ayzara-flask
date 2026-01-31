@@ -11,6 +11,11 @@ from flask_login import current_user
 from app.services import RecordingService
 from app.models import db, PackingRecord
 
+# [ANTIGRAVITY] GEVENT THREADPOOL
+import gevent
+from gevent.threadpool import ThreadPool
+_barcode_pool = ThreadPool(4) # Barcode workers
+
 
 def register_socketio_handlers(socketio):
     """Register all SocketIO event handlers"""
@@ -117,7 +122,9 @@ def register_socketio_handlers(socketio):
                 return
                 
             # Detect barcode
-            barcode = BarcodeService.detect_barcode_from_frame(frame)
+            # [ANTIGRAVITY] BLOCKING CALL - OFFLOAD TO THREADPOOL
+            # barcode = BarcodeService.detect_barcode_from_frame(frame)
+            barcode = _barcode_pool.apply(BarcodeService.detect_barcode_from_frame, (frame,))
             
             # DEBUG: Visibility for user
             # print(f"[SocketIO] Scanning... Found: {barcode if barcode else 'NO'}")

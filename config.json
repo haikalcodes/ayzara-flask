@@ -1,5 +1,6 @@
 {
   "rtsp_url": "http://192.168.43.1:4747/mjpegfeed",
+  "app_version": "1.0.0",
   "rtsp_transport": "tcp",
   "camera_timeout": 10,
   "recordings_folder": "recordings",
@@ -40,7 +41,7 @@
     {
       "id": 1,
       "name": "Kamera A",
-      "url": "rtsp://admin:Asdfz12345@192.168.1.101:554/Streaming/Channels/102",
+      "url": "rtsp://admin:Ayzara2026@192.168.1.101:554/Streaming/Channels/102",
       "enabled": true
     },
     {
@@ -58,7 +59,13 @@
     {
       "id": 4,
       "name": "Kamera A+",
-      "url": "rtsp://admin:Asdfz12345@192.168.1.101:554/Streaming/Channels/101",
+      "url": "rtsp://admin:Ayzara2026@192.168.1.101:554/Streaming/Channels/101",
+      "enabled": true
+    },
+    {
+      "id": 5,
+      "name": "DroidCam (192.168.43.1)",
+      "url": "http://192.168.43.1:4747/mjpegfeed",
       "enabled": true
     }
   ],
