@@ -62,8 +62,11 @@ try:
     with open(CONFIG_FILE, 'r') as f:
         config_data = json.load(f)
         APP_VERSION = config_data.get('app_version', '1.0.0')
+        # [ANTIGRAVITY] Max Recording Duration (seconds)
+        MAX_RECORDING_DURATION = config_data.get('max_recording_duration', 3600)
 except Exception as e:
     APP_VERSION = "1.0.0"
+    MAX_RECORDING_DURATION = 3600
 
 APP_AUTHOR = "AYZARA COLLECTIONS"
 BRAND_NAME = "AYZARA"

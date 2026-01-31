@@ -386,6 +386,13 @@
                     style="background: rgba(40, 167, 69, 0.1); border: 4px solid #28a745; z-index: 50; pointer-events: none;">
                 </div>
 
+                <!-- [ANTIGRAVITY] NEW: Scan Timer Overlay (Synced with Recording) -->
+                <div id="scan-recording-timer"
+                    class="position-absolute d-none font-monospace fw-bold text-white px-2 py-1 rounded"
+                    style="top: 10px; right: 10px; background: rgba(0,0,0,0.6); z-index: 60; font-size: 1.2rem;">
+                    00:00
+                </div>
+
                 <!-- [ANTIGRAVITY] NEW: Scanner Zoom Controls -->
                 <div id="scan-zoom-container" class="zoom-controls d-none" style="bottom: 15px; right: 15px;">
                     <button class="zoom-btn" onclick="adjustScanZoom(0.5)" title="Zoom In (Backend)">
@@ -400,6 +407,18 @@
                 </div>
                 <div id="scan-zoom-indicator" class="zoom-info" style="bottom: 70px;">Zoom: 1.0x</div>
 
+            </div>
+        </div>
+
+        <!-- [ANTIGRAVITY] NEW: Scan Card Footer with Actions -->
+        <div class="card-footer d-none" id="scan-card-footer">
+            <div class="d-flex gap-2 justify-content-center">
+                <button id="btn-stop-scan" class="btn btn-danger flex-grow-1" onclick="stopRecording()">
+                    <i class="bi bi-check-circle-fill me-1"></i> Selesai & Simpan
+                </button>
+                <button id="btn-cancel-scan" class="btn btn-outline-secondary flex-grow-1" onclick="cancelRecording()">
+                    <i class="bi bi-x-lg me-1"></i> Batal
+                </button>
             </div>
         </div>
 
@@ -466,17 +485,7 @@
             </div>
         </div>
 
-        <!-- [ANTIGRAVITY] NEW: Scan Card Footer with Actions -->
-        <div class="card-footer d-none" id="scan-card-footer">
-            <div class="d-flex gap-2 justify-content-center">
-                <button id="btn-stop-scan" class="btn btn-danger flex-grow-1" onclick="stopRecording()">
-                    <i class="bi bi-check-circle-fill me-1"></i> Selesai & Simpan
-                </button>
-                <button id="btn-cancel-scan" class="btn btn-outline-secondary flex-grow-1" onclick="cancelRecording()">
-                    <i class="bi bi-x-lg me-1"></i> Batal
-                </button>
-            </div>
-        </div>
+
     </div>
 
 
@@ -2631,6 +2640,10 @@
 
                     document.getElementById('recording-timer').classList.remove('d-none');
 
+                    // [ANTIGRAVITY] Show Scanner Timer
+                    const scanTimer = document.getElementById('scan-recording-timer');
+                    if (scanTimer) scanTimer.classList.remove('d-none');
+
                     // [ANTIGRAVITY] Show Scan Buttons
                     const scanFooter = document.getElementById('scan-card-footer');
                     if (scanFooter) {
@@ -2678,7 +2691,10 @@
             .catch(err => {
                 playSound('error');
                 speakText('rekaman_gagal');
-                alert('Error: ' + err);
+                if (err) {
+                    alert('Error: ' + err);
+
+                }
             });
     }
 
@@ -2699,16 +2715,15 @@
 
         updateStatus('💾 Menyimpan rekaman...');
 
-        // [ANTIGRAVITY] Show Loading Dialog
-        Swal.fire({
-            title: 'Menyimpan Rekaman...',
-            html: 'Mohon tunggu sebentar.<br>Sedang memproses video...',
-            allowOutsideClick: false,
-            showConfirmButton: false,
-            didOpen: () => {
-                Swal.showLoading();
-            }
+        // [ANTIGRAVITY] Non-blocking "Saving" Toast
+        Toast.fire({
+            icon: 'info',
+            title: '💾 Menyimpan...',
+            text: 'Mohon tunggu sebentar',
+            timer: 2000,
+            showConfirmButton: false
         });
+
 
 
         // Voice notification
@@ -2803,7 +2818,9 @@
                     // Voice notification for save error
                     speakText('rekaman_gagal');
 
-                    alert('Gagal stop: ' + data.error);
+                    if (data.error) {
+                        alert('Gagal stop: ' + data.error);
+                    }
                 }
             })
             .catch(err => {
@@ -2827,6 +2844,7 @@
         document.getElementById('btn-stop')?.classList.add('d-none');
         document.getElementById('btn-cancel')?.classList.add('d-none');
         document.getElementById('recording-timer')?.classList.add('d-none');
+        document.getElementById('scan-recording-timer')?.classList.add('d-none');
 
         // [ANTIGRAVITY] Hide Scan Buttons
         const scanFooter = document.getElementById('scan-card-footer');
@@ -2990,6 +3008,10 @@
             const min = Math.floor(diff / 60).toString().padStart(2, '0');
             const sec = (diff % 60).toString().padStart(2, '0');
             timerEl.textContent = `${min}:${sec}`;
+
+            // [ANTIGRAVITY] Sync Scanner Timer
+            const scanTimer = document.getElementById('scan-recording-timer');
+            if (scanTimer) scanTimer.textContent = `${min}:${sec}`;
 
             // Color coding based on validation
             timerEl.classList.remove('text-success', 'text-warning', 'text-danger');

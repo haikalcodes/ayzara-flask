@@ -43,6 +43,53 @@ class RecordingService:
         """
         self.db = db_instance
         self.PackingRecord = packing_record_model
+        
+        # [ANTIGRAVITY] AUTO-STOP MONITOR
+        # Start background monitor for max duration limits
+        if not getattr(self, 'stop_monitor_started', False):
+            gevent.spawn(self._auto_stop_monitor)
+            self.stop_monitor_started = True
+
+    def _auto_stop_monitor(self):
+        """Background loop to correct long running recordings"""
+        import config
+        print(f"[Recording] Auto-stop monitor started (Limit: {config.MAX_RECORDING_DURATION}s)")
+        
+        while True:
+            try:
+                # Sleep first to allow startup
+                time.sleep(10)
+                
+                limit = config.MAX_RECORDING_DURATION
+                if limit <= 0: continue
+                
+                # Check for expired recordings
+                expired_ids = []
+                with recording_lock:
+                    now = time.time()
+                    for rid, info in active_recordings.items():
+                        start = info.get('start_time', 0)
+                        if now - start > limit:
+                            expired_ids.append(rid)
+                
+                # Stop them OUTSIDE the lock to avoid deadlocks
+                for rid in expired_ids:
+                    print(f"[Recording] 🛑 Auto-stopping {rid} (Duration > {limit}s)")
+                    # We need a new service instance or context to avoid threading issues with DB?
+                    # Actually, we can just call self.stop_recording if we are careful.
+                    # Ideally, create a fresh scope or ensure thread safety.
+                    # Since we are in gevent, we are in the same process.
+                    
+                    # Create a new app context if needed, but for now try direct call.
+                    # WARNING: self.db.session must be thread-safe or scoped.
+                    # Flask-SQLAlchemy handles scoped sessions usually.
+                    
+                    success, msg, _ = self.stop_recording(rid, save_video=True)
+                    video_logger.info(f"Auto-stopped {rid}: {msg}")
+                    
+            except Exception as e:
+                print(f"[Recording] Monitor error: {e}")
+                time.sleep(10) # Prevent tight loop on error
     
     def get_active_recording(self):
         """

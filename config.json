@@ -5,7 +5,7 @@
   "camera_timeout": 10,
   "recordings_folder": "recordings",
   "database_file": "packing_records.db",
-  "max_recording_duration": 1800,
+  "max_recording_duration": 60,
   "ffmpeg_path": "ffmpeg",
   "use_ffmpeg": true,
   "resi_prefix": "JX",
@@ -72,6 +72,12 @@
       "id": 6,
       "name": "Local Camera 1",
       "url": "1",
+      "enabled": true
+    },
+    {
+      "id": 7,
+      "name": "ONVIF Camera (192.168.43.39)",
+      "url": "http://admin:admin@192.168.43.39:8080/video",
       "enabled": true
     }
   ],

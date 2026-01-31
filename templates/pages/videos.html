@@ -43,6 +43,17 @@
                                 <div id="html5-search-reader" style="width: 100%; max-width: 350px;"></div>
                             </div>
 
+                            <!-- [ANTIGRAVITY] ZOOM CONTROLS -->
+                            <div id="zoomContainer" class="zoom-controls d-none">
+                                <div class="zoom-btn" onclick="adjustZoom(0.1)" title="Zoom In"><i
+                                        class="bi bi-plus-lg"></i></div>
+                                <div class="zoom-btn" onclick="resetZoom()" title="Reset"><i
+                                        class="bi bi-arrow-counterclockwise"></i></div>
+                                <div class="zoom-btn" onclick="adjustZoom(-0.1)" title="Zoom Out"><i
+                                        class="bi bi-dash-lg"></i></div>
+                            </div>
+                            <div id="zoomIndicator" class="zoom-info" style="display: none;">Zoom: 1.0x</div>
+
                             <div id="camera-search-placeholder"
                                 class="d-flex flex-column justify-content-center align-items-center h-100 text-muted p-4"
                                 style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
@@ -715,7 +726,8 @@
         if (scanningControls) scanningControls.classList.remove('d-none');
 
         // Show zoom controls
-        document.getElementById('zoomContainer').classList.remove('d-none');
+        const zoomContainer = document.getElementById('zoomContainer');
+        if (zoomContainer) zoomContainer.classList.remove('d-none');
         resetZoom();
 
         // 3. Start Search Loop
@@ -881,8 +893,11 @@
         localStorage.removeItem('inputs_videos_camera_url');
 
         // Hide zoom controls
-        document.getElementById('zoomContainer').classList.add('d-none');
-        document.getElementById('zoomIndicator').style.display = 'none';
+        const zoomContainer = document.getElementById('zoomContainer');
+        if (zoomContainer) zoomContainer.classList.add('d-none');
+
+        const zoomIndicator = document.getElementById('zoomIndicator');
+        if (zoomIndicator) zoomIndicator.style.display = 'none';
 
         // Stop local
         if (html5SearchQrCode) {
