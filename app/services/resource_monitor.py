@@ -59,34 +59,37 @@ class ResourceMonitor:
                 'timestamp': time.time()
             }
     
-    def check_restart_threshold(self, ram_percent):
-        """Check if system needs restart due to high memory"""
-        RESTART_THRESHOLD = 95  # 95% RAM - restart point
-        WARNING_THRESHOLD = 93  # 93% RAM - warning only
+    def check_resource_thresholds(self, resources):
+        """Check safeguards and emit warnings only (NO AUTO RESTART)"""
+        LIMIT_RAM = 90
+        LIMIT_CPU = 95
+        LIMIT_DISK = 90
         
-        if ram_percent >= RESTART_THRESHOLD:
-            print(f"[RESTART] RAM at {ram_percent}% - Initiating graceful restart")
-            
-            # Emit restart warning to all clients
-            socketio.emit('system_restart', {
-                'message': 'Server restarting in 5 seconds due to high memory',
-                'ram': ram_percent,
-                'countdown': 5
+        # Check RAM
+        if resources['ram'] >= LIMIT_RAM:
+            socketio.emit('resource_warning', {
+                'resource': 'RAM',
+                'percent': resources['ram'],
+                'level': 'critical',
+                'message': f'Penggunaan RAM tinggi ({resources["ram"]}%)'
             })
             
-            # Wait 5 seconds for message delivery
-            time.sleep(5)
-            
-            # Exit cleanly (batch script will restart)
-            import sys
-            sys.exit(0)
-        
-        elif ram_percent >= WARNING_THRESHOLD:
-            # Soft warning only (approaching restart threshold)
+        # Check CPU
+        if resources['cpu'] >= LIMIT_CPU:
             socketio.emit('resource_warning', {
-                'level': 'critical',
-                'ram': ram_percent,
-                'message': f'Memory critical: {ram_percent}% - Restart imminent'
+                'resource': 'CPU',
+                'percent': resources['cpu'],
+                'level': 'warning',
+                'message': f'Load CPU tinggi ({resources["cpu"]}%)'
+            })
+
+        # Check Disk
+        if resources['disk'] >= LIMIT_DISK:
+            socketio.emit('resource_warning', {
+                'resource': 'Disk',
+                'percent': resources['disk'],
+                'level': 'warning',
+                'message': f'Penyimpanan hampir penuh ({resources["disk"]}%)'
             })
     
     def monitoring_loop(self):
@@ -101,8 +104,8 @@ class ResourceMonitor:
                 # Emit to all connected clients
                 socketio.emit('resource_update', resources)
                 
-                # Check restart threshold
-                self.check_restart_threshold(resources['ram'])
+                # Check warnings
+                self.check_resource_thresholds(resources)
                 
                 # Sleep until next update
                 time.sleep(self.update_interval)

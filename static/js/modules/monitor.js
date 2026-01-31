@@ -26,11 +26,6 @@ export function initResourceMonitor() {
         showResourceWarning(data);
     });
 
-    // Listen for restart notifications
-    socket.on('system_restart', (data) => {
-        showRestartNotification(data);
-    });
-
     console.log('[Monitor] Resource monitor initialized');
 }
 
@@ -77,32 +72,46 @@ function getColorClass(percent) {
     return 'bg-success';
 }
 
+let warningShown = false; // [ANTIGRAVITY] Spam Prevention Flag
+
 function showResourceWarning(data) {
     if (typeof Swal === 'undefined') return;
+    if (warningShown) return; // Prevent spam if already shown
+
+    const resourceName = data.resource === 'CPU' ? 'CPU Server' :
+        data.resource === 'RAM' ? 'RAM Server' : data.resource;
+
+    // Determine action advice
+    let advice = 'Silakan periksa kondisi server.';
+    if (data.resource === 'Disk') advice = 'Mohon hapus data lama atau arsipkan video.';
+    else advice = 'Silakan restart server website (run_prod.bat) agar performa kembali lancar.';
+
+    warningShown = true; // Set flag
 
     Swal.fire({
         icon: 'warning',
-        title: 'System Warning',
-        html: `<strong>${data.resource || 'System'}</strong> usage is at <strong>${data.percent || data.ram}%</strong><br>${data.message}`,
+        title: `⚠️ ${resourceName} Critical!`,
+        html: `
+            <div class="text-start">
+                <p>Penggunaan <strong>${resourceName}</strong> mencapai <strong>${data.percent}%</strong>.</p>
+                <p class="mb-2 text-warning">${advice}</p>
+                <hr>
+                <p class="small text-muted mb-0">
+                    <i class="bi bi-info-circle me-1"></i> 
+                    Jika halaman macet/hang, silakan refresh browser Anda. 
+                    Notifikasi ini tidak akan muncul lagi sampai halaman di-refresh.
+                </p>
+            </div>
+        `,
         background: '#1a1a2e',
         color: '#fff',
-        confirmButtonColor: '#ff6b6b',
-        timer: 10000
-    });
-}
-
-function showRestartNotification(data) {
-    if (typeof Swal === 'undefined') return;
-
-    Swal.fire({
-        icon: 'error',
-        title: 'System Restarting',
-        html: `<strong>Critical RAM Usage: ${data.ram}%</strong><br>System will restart in ${data.countdown} seconds to prevent crash.`,
-        background: '#1a1a2e',
-        color: '#fff',
-        timer: data.countdown * 1000,
-        timerProgressBar: true,
-        showConfirmButton: false,
+        confirmButtonColor: '#ffc107',
+        confirmButtonText: 'Oke, Mengerti',
         allowOutsideClick: false
+    }).then(() => {
+        // Optional: Could reset flag here if we want to allow re-showing after explicit dismissal,
+        // but user requested "only once until restart/page load", so we keep it true.
     });
 }
+
+// showRestartNotification removed as requested
