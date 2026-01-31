@@ -102,12 +102,11 @@ function showResourceWarning(data) {
         timer: 5000,
         // Close handler to suppress future warnings
         didClose: () => {
-            // Only suppress if it was a manual close (not timer) 
-            // OR strictly suppress everything? User said "klo misal ditutup".
-            // Let's suppress everything to be safe against spam.
-            if (data.action) { // Only suppress critical ones? Or all? User said "alertnya 1 aja".
+            // [ANTIGRAVITY] Strict Suppression
+            // User requested: "Once OK is clicked, don't show again until restart"
+            if (!isWarningSuppressed) {
                 isWarningSuppressed = true;
-                console.log('[Monitor] Warnings suppressed until next server restart');
+                console.log('[Monitor] All warnings suppressed until next server restart/page reload');
             }
         }
     };

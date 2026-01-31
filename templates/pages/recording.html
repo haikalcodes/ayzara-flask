@@ -2719,8 +2719,8 @@
         Toast.fire({
             icon: 'info',
             title: '💾 Menyimpan...',
-            text: 'Mohon tunggu sebentar',
-            timer: 2000,
+            text: 'Mohon tunggu sebentar...',
+            timer: 0, // Persistent until replaced
             showConfirmButton: false
         });
 
@@ -3032,8 +3032,16 @@
         clearInterval(timerInterval); // Stop timer immediately
         stopRecording();
 
-        // Optional: Audible warning
+        // Audible warning
         playSound('beep');
+
+        // [ANTIGRAVITY] Max Duration Alert
+        Swal.fire({
+            icon: 'warning',
+            title: 'Batas Waktu Tercapai!',
+            text: `Rekaman otomatis dihentikan karena mencapai batas durasi ${Math.floor(limit / 60)} menit.`,
+            confirmButtonText: 'OK'
+        });
     }
 
         }, 1000);
