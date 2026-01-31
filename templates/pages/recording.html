@@ -3024,10 +3024,17 @@
                 timerEl.classList.add('text-danger');
             }
 
-            // Auto check
-            if (diff >= 300) { // 5 min max
-                stopRecording(); // Auto stop/split logic could go here
-            }
+            // [ANTIGRAVITY] Auto-Stop (Configured Limit)
+            const limit = {{ max_recording_duration | default (3600)
+        }};
+    if (diff >= limit) {
+        console.log(`>>> [Timer] Auto-stopping: Duration (${diff}s) >= Limit (${limit}s)`);
+        clearInterval(timerInterval); // Stop timer immediately
+        stopRecording();
+
+        // Optional: Audible warning
+        playSound('beep');
+    }
 
         }, 1000);
     }

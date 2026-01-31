@@ -22,7 +22,8 @@ def rekam_packing():
     """Packing recording page"""
     return render_template('pages/recording.html',
         platforms=config.PLATFORMS,
-        default_rtsp_url=config.DEFAULT_RTSP_URL
+        default_rtsp_url=config.DEFAULT_RTSP_URL,
+        max_recording_duration=config.MAX_RECORDING_DURATION
     )
 
 

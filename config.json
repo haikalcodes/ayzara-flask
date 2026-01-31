@@ -5,7 +5,7 @@
   "camera_timeout": 10,
   "recordings_folder": "recordings",
   "database_file": "packing_records.db",
-  "max_recording_duration": 60,
+  "max_recording_duration": 300,
   "ffmpeg_path": "ffmpeg",
   "use_ffmpeg": true,
   "resi_prefix": "JX",
