@@ -76,7 +76,8 @@ def create_app(config_object=config):
     
     # Initialize SocketIO
     import os
-    mode = 'gevent' if os.environ.get('AYZARA_MODE') == 'production' else 'threading'
+    # Default to gevent (Production/Dev), only use threading if explicitly set
+    mode = 'threading' if os.environ.get('AYZARA_MODE') == 'threading' else 'gevent'
     print(f"[SocketIO] Initializing with {mode} mode...")
     
     socketio = SocketIO(app, cors_allowed_origins="*", async_mode=mode, 

@@ -88,6 +88,7 @@ echo.
 echo ==================================================
 echo   STARTING AYZARA SECURE SERVER (HTTPS^)
 echo   Certificates: .\ssl\
+echo   Engine: Gevent
 echo ==================================================
 echo.
 echo :check_venv
@@ -112,10 +113,8 @@ echo start /min cmd /c "timeout /t 3 >nul && start https://localhost:5000"
 echo python run_dev_secure.py
 echo.
 echo echo.
-echo echo [WARNING] Server stopped unexpectedly!
-echo echo [INFO] Restarting in 5 seconds...
-echo timeout /t 5
-echo goto start_app
+echo echo [INFO] Server stopped.
+echo pause
 ) > start_dev_secure.bat
 
 echo.

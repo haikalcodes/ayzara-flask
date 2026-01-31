@@ -1,10 +1,14 @@
 import os
+# [ANTIGRAVITY] GEVENT MONKEY PATCH - MUST BE FIRST
+from gevent import monkey
+monkey.patch_all()
+
 import logging
 import ssl
 import socket
 
-#SSL MODE
-os.environ['AYZARA_MODE'] = 'threading'
+# DEV MODE (GEVENT)
+os.environ['AYZARA_MODE'] = 'development'
 
 from app import create_app, init_database
 import config
@@ -42,7 +46,8 @@ if __name__ == '__main__':
     print(f"   v{config.APP_VERSION}")
     print(f"{'='*60}")
     print(f"   >> Access Secure : https://{local_ip}:{port}")
-    print(f"   >> Note          : Install ssl/rootCA.pem on phone for valid lock!")
+    print(f"   >> Engine         : Gevent (Async/Monkey Patched)")
+    print(f"   >> Note           : Install ssl/rootCA.pem on phone for valid lock!")
     print(f"{'='*60}\n")
     
 
@@ -52,14 +57,15 @@ if __name__ == '__main__':
         from app.services.resource_monitor import start_resource_monitoring
         start_resource_monitoring()
         
-        # Run with SSL Context
+        # Run with SSL (Gevent uses keyfile/certfile)
         socketio.run(app, 
                      host=host, 
                      port=port, 
                      debug=True,
                      use_reloader=False, 
                      log_output=True,
-                     ssl_context=(cert_path, key_path))
+                     keyfile=key_path,
+                     certfile=cert_path)
     else:
         logger.error(f"SSL Certificates not found at {cert_path}")
         logger.error("Please run 'installer_ssl.bat' first.")
