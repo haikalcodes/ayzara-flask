@@ -358,7 +358,9 @@ def api_camera_capture():
     import time
     
     # Compress to jpg
-    ret, buffer = cv2.imencode('.jpg', frame)
+    # ret, buffer = cv2.imencode('.jpg', frame)
+    from app.services.camera_service import run_cv
+    ret, buffer = run_cv(cv2.imencode, '.jpg', frame)
     if not ret:
         return jsonify({'success': False, 'error': 'Failed to encode image'})
         
@@ -687,7 +689,10 @@ def api_cameras_test():
                     success = False
                     for backend in backends:
                         try:
-                            cap = cv2.VideoCapture(v_src, backend)
+                            # cap = cv2.VideoCapture(v_src, backend)
+                            # [ANTIGRAVITY] OFFLOAD INIT
+                            cap = _camera_test_pool.apply(cv2.VideoCapture, (v_src, backend))
+                            
                             if cap and cap.isOpened():
                                 # [ANTIGRAVITY] Run validation loop in threadpool
                                 def _validate_cam(cap_ref):

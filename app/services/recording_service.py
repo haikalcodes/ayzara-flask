@@ -137,6 +137,7 @@ class RecordingService:
             
             # MJPEG Writer (100% reliable in OpenCV)
             fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+            # [ANTIGRAVITY] Direct Blocking Init (Safe in Worker Thread)
             out = cv2.VideoWriter(temp_path, fourcc, fps, (w, h))
             
             if not out.isOpened():
@@ -157,9 +158,8 @@ class RecordingService:
                     if current_ts > last_ts:
                         frame = camera.get_raw_frame()
                         if frame is not None:
-                            # [ANTIGRAVITY] OFFLOAD BLOCKING WRITE
-                            # out.write(frame)
-                            _rec_pool.apply(out.write, (frame,))
+                            # [ANTIGRAVITY] Direct Blocking Write (Safe in Worker Thread)
+                            out.write(frame)
                             
                             last_ts = current_ts
                             frames_written += 1
@@ -324,12 +324,14 @@ class RecordingService:
             stop_event = threading.Event()
             recording_id = f"rec_{record.id}_{int(time.time())}"
             
-            t = threading.Thread(
-                target=self._record_video_thread,
-                args=(recording_id, camera_url, output_path, stop_event)
-            )
-            t.daemon = True
-            t.start()
+            # [ANTIGRAVITY] THREAD AFFINITY FIX
+            # Use real worker thread instead of Greenlet/ThreadPool.apply wrapper
+            # Capture the AsyncResult so we can wait for it later!
+            async_result = _rec_pool.apply_async(self._record_video_thread, args=(recording_id, camera_url, output_path, stop_event))
+            
+            # NOTE: We don't get a handle to the thread easily with apply_async.
+            # But we use stop_event to control it.
+            # The 't' variable is less useful now, but we keep the dict structure valid.
             
 
             
@@ -345,7 +347,7 @@ class RecordingService:
                     'output_path': output_path,
                     'start_time': time.time(),
                     'stop_event': stop_event,
-                    'thread': t
+                    'thread': async_result 
                 }
             
             audit_logger.info(f"RECORDING STARTED", extra={'context': {'resi': resi, 'pegawai': pegawai, 'rec_id': recording_id}})
@@ -384,8 +386,15 @@ class RecordingService:
             # Stop the thread
             if 'stop_event' in rec_info:
                 rec_info['stop_event'].set()
-                if 'thread' in rec_info:
-                     rec_info['thread'].join(timeout=5.0) # Wait up to 5s
+                rec_info['stop_event'].set()
+                if 'thread' in rec_info and rec_info['thread']:
+                     try:
+                        # Wait for thread to finish (including FFmpeg)
+                        # This yields to other greenlets, so it's safe.
+                        # We give it plenty of time (e.g. 60s) for encoding.
+                        rec_info['thread'].get(timeout=60.0)
+                     except Exception as e:
+                        video_logger.error(f"Waiting for recording thread failed: {e}")
             
             # Get database record
             record = self.PackingRecord.query.get(rec_info['db_id'])

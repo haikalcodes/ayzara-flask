@@ -10,6 +10,7 @@ from flask_socketio import emit
 from flask_login import current_user
 from app.services import RecordingService
 from app.models import db, PackingRecord
+from app.utils.safe_execution import safe_socket_handler
 
 # [ANTIGRAVITY] GEVENT THREADPOOL
 import gevent
@@ -21,16 +22,20 @@ def register_socketio_handlers(socketio):
     """Register all SocketIO event handlers"""
     
     @socketio.on('connect')
-    def handle_connect():
+    @safe_socket_handler
+    def handle_connect(*args, **kwargs):
         """Handle client connection"""
-        print(f'[SocketIO] Client connected: {current_user.username if current_user.is_authenticated else "Anonymous"}')
+        current_user_name = current_user.username if current_user.is_authenticated else "Anonymous"
+        print(f'[SocketIO] Client connected: {current_user_name}')
     
     @socketio.on('disconnect')
-    def handle_disconnect():
+    @safe_socket_handler
+    def handle_disconnect(*args, **kwargs):
         """Handle client disconnection"""
         print(f'[SocketIO] Client disconnected')
     
     @socketio.on('request_status')
+    @safe_socket_handler
     def handle_request_status():
         """Handle status request from client"""
         recording_service = RecordingService(db, PackingRecord)
@@ -38,6 +43,7 @@ def register_socketio_handlers(socketio):
         emit('status_update', status)
     
     @socketio.on('start_recording')
+    @safe_socket_handler
     def handle_start_recording(data):
         """Handle start recording request"""
         resi = data.get('resi')
@@ -63,6 +69,7 @@ def register_socketio_handlers(socketio):
             socketio.emit('status_update', status, broadcast=True)
     
     @socketio.on('stop_recording')
+    @safe_socket_handler
     def handle_stop_recording(data):
         """Handle stop recording request"""
         recording_id = data.get('recording_id')
@@ -81,6 +88,7 @@ def register_socketio_handlers(socketio):
         socketio.emit('status_update', status, broadcast=True)
     
     @socketio.on('cancel_recording')
+    @safe_socket_handler
     def handle_cancel_recording(data):
         """Handle cancel recording request"""
         recording_id = data.get('recording_id')
@@ -99,6 +107,7 @@ def register_socketio_handlers(socketio):
         socketio.emit('status_update', status, broadcast=True)
 
     @socketio.on('detect_barcode')
+    @safe_socket_handler
     def handle_detect_barcode(data):
         """Handle barcode detection request from camera stream"""
         url = data.get('url')
@@ -115,8 +124,8 @@ def register_socketio_handlers(socketio):
                 emit('barcode_result', {'success': False, 'found': False, 'error': 'Camera unavailable'})
                 return
                 
-            # Get raw frame
-            frame = camera.get_raw_frame()
+            # Get scan frame (zoomed if active)
+            frame = camera.get_scan_frame()
             if frame is None:
                 emit('barcode_result', {'success': False, 'found': False, 'error': 'No frame'})
                 return

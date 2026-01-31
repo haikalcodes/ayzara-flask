@@ -6,6 +6,8 @@
 
 import { getSocket } from './socket.js';
 
+let isWarningSuppressed = false;
+
 export function initResourceMonitor() {
     console.log('[Monitor] Initializing resource monitor...');
 
@@ -15,6 +17,12 @@ export function initResourceMonitor() {
         setTimeout(initResourceMonitor, 1000);
         return;
     }
+
+    // [ANTIGRAVITY] Reset suppression on connection (Server Restart)
+    socket.on('connect', () => {
+        isWarningSuppressed = false;
+        console.log('[Monitor] Connected - Warning suppression reset');
+    });
 
     // Listen for resource updates
     socket.on('resource_update', (data) => {
@@ -26,10 +34,7 @@ export function initResourceMonitor() {
         showResourceWarning(data);
     });
 
-    // Listen for restart notifications
-    socket.on('system_restart', (data) => {
-        showRestartNotification(data);
-    });
+
 
     console.log('[Monitor] Resource monitor initialized');
 }
@@ -80,29 +85,83 @@ function getColorClass(percent) {
 function showResourceWarning(data) {
     if (typeof Swal === 'undefined') return;
 
-    Swal.fire({
+    // [ANTIGRAVITY] Prevent Spam: Don't stack alerts if one is already open
+    if (Swal.isVisible()) return;
+
+    // [ANTIGRAVITY] Suppression: Don't show again if closed once (until restart)
+    if (isWarningSuppressed) return;
+
+    // Default configuration for standard warnings
+    let config = {
         icon: 'warning',
-        title: 'System Warning',
-        html: `<strong>${data.resource || 'System'}</strong> usage is at <strong>${data.percent || data.ram}%</strong><br>${data.message}`,
+        title: 'Peringatan Sistem',
+        html: `<strong>${data.resource || 'System'}</strong> usage: <strong>${data.percent || 0}%</strong><br>${data.message}`,
         background: '#1a1a2e',
         color: '#fff',
         confirmButtonColor: '#ff6b6b',
-        timer: 10000
-    });
-}
+        timer: 5000,
+        // Close handler to suppress future warnings
+        didClose: () => {
+            // Only suppress if it was a manual close (not timer) 
+            // OR strictly suppress everything? User said "klo misal ditutup".
+            // Let's suppress everything to be safe against spam.
+            if (data.action) { // Only suppress critical ones? Or all? User said "alertnya 1 aja".
+                isWarningSuppressed = true;
+                console.log('[Monitor] Warnings suppressed until next server restart');
+            }
+        }
+    };
 
-function showRestartNotification(data) {
-    if (typeof Swal === 'undefined') return;
+    // [ANTIGRAVITY] Critical Action Handlers
+    const troubleshootingInfo = `
+        <div class="mt-3 pt-2 border-top border-secondary small text-warning opacity-75">
+            <i class="bi bi-info-circle me-1"></i>
+            <strong>Info:</strong> Jika aplikasi macet/hang, cek Kondisi Server & Refresh halaman di HP/PC Pegawai.
+        </div>
+    `;
 
-    Swal.fire({
-        icon: 'error',
-        title: 'System Restarting',
-        html: `<strong>Critical RAM Usage: ${data.ram}%</strong><br>System will restart in ${data.countdown} seconds to prevent crash.`,
-        background: '#1a1a2e',
-        color: '#fff',
-        timer: data.countdown * 1000,
-        timerProgressBar: true,
-        showConfirmButton: false,
-        allowOutsideClick: false
-    });
+    if (data.action === 'restart') {
+        // Critical RAM -> Manual Restart Required
+        config.icon = 'error';
+        config.title = 'MEMORI SERVER KRITIS (RAM)';
+        config.html = `
+            <div class="text-start">
+                <p>RAM (Memory) Server hampir penuh (<strong>${data.percent}%</strong>). Sistem mungkin tidak stabil atau crash.</p>
+                <div class="alert alert-dark border border-secondary p-2 mb-2">
+                    <strong>TINDAKAN DIPERLUKAN:</strong>
+                    <ol class="mb-0 ps-3">
+                        <li>Tutup jendela server (Command Prompt).</li>
+                        <li>Jalankan ulang <code>run_prod.py</code> secara manual.</li>
+                    </ol>
+                </div>
+                ${troubleshootingInfo}
+            </div>
+        `;
+        config.timer = null; // Sticky
+        config.showConfirmButton = true;
+        config.confirmButtonText = 'Saya Mengerti (Tutup)';
+    }
+    else if (data.action === 'delete') {
+        // Critical Disk -> Manual Cleanup Required
+        config.icon = 'error';
+        config.title = 'PENYIMPANAN SERVER PENUH';
+        config.html = `
+            <div class="text-start">
+                <p>Penyimpanan (Disk) Server hampir penuh (<strong>${data.percent}%</strong>). Gagal menyimpan rekaman baru!</p>
+                <div class="alert alert-dark border border-secondary p-2 mb-2">
+                    <strong>TINDAKAN DIPERLUKAN:</strong>
+                    <ul class="mb-0 ps-3">
+                        <li>Hapus video lama di menu "Galeri Video".</li>
+                        <li>Atau pindahkan file rekaman ke harddisk eksternal.</li>
+                    </ul>
+                </div>
+                ${troubleshootingInfo}
+            </div>
+        `;
+        config.timer = null; // Sticky
+        config.showConfirmButton = true;
+        config.confirmButtonText = 'OK, Saya Cek Folder';
+    }
+
+    Swal.fire(config);
 }

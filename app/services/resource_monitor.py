@@ -59,59 +59,48 @@ class ResourceMonitor:
                 'timestamp': time.time()
             }
     
-    def check_restart_threshold(self, ram_percent):
-        """Check if system needs restart due to high memory"""
-        RESTART_THRESHOLD = 95  # 95% RAM - restart point
-        WARNING_THRESHOLD = 93  # 93% RAM - warning only
+    def check_thresholds(self, ram_percent, disk_percent):
+        """Check resource thresholds and emit critical warnings (No Auto-Restart)"""
+        CRITICAL_THRESHOLD = 95
+        WARNING_THRESHOLD = 90
         
-        if ram_percent >= RESTART_THRESHOLD:
-            print(f"[RESTART] RAM at {ram_percent}% - Initiating graceful restart")
-            
-            # Emit restart warning to all clients
-            socketio.emit('system_restart', {
-                'message': 'Server restarting in 5 seconds due to high memory',
-                'ram': ram_percent,
-                'countdown': 5
-            })
-            
-            # Wait 5 seconds for message delivery
-            time.sleep(5)
-            
-            # Exit cleanly (batch script will restart)
-            import sys
-            sys.exit(0)
-        
-        elif ram_percent >= WARNING_THRESHOLD:
-            # Soft warning only (approaching restart threshold)
+        # 1. RAM Check
+        if ram_percent >= CRITICAL_THRESHOLD:
             socketio.emit('resource_warning', {
-                'level': 'critical',
-                'ram': ram_percent,
-                'message': f'Memory critical: {ram_percent}% - Restart imminent'
+                'type': 'critical_ram',
+                'resource': 'RAM',
+                'percent': ram_percent,
+                'message': 'Memory is critically high! Server instability may occur.',
+                'action': 'restart' # Instruction for frontend
+            })
+        elif ram_percent >= WARNING_THRESHOLD:
+            socketio.emit('resource_warning', {
+                'type': 'warning_ram',
+                'resource': 'RAM',
+                'percent': ram_percent,
+                'message': 'High memory usage detected.'
+            })
+
+        # 2. Disk Check
+        if disk_percent >= CRITICAL_THRESHOLD:
+            socketio.emit('resource_warning', {
+                'type': 'critical_disk',
+                'resource': 'Disk',
+                'percent': disk_percent,
+                'message': 'Storage is almost full! Recordings may fail.',
+                'action': 'delete' # Instruction for frontend
             })
     
     def monitoring_loop(self):
-        """Background monitoring loop"""
-        print("[ResourceMonitor] Monitoring started")
+        """Background monitoring loop (Wrapped via safe_thread_loop in start())"""
+        # Get resources
+        resources = self.get_system_resources()
         
-        while self.running:
-            try:
-                # Get resources
-                resources = self.get_system_resources()
-                
-                # Emit to all connected clients
-                socketio.emit('resource_update', resources)
-                
-                # Check restart threshold
-                self.check_restart_threshold(resources['ram'])
-                
-                # Sleep until next update
-                time.sleep(self.update_interval)
-                
-            except Exception as e:
-                print(f"[ResourceMonitor] Loop error: {e}")
-                time.sleep(self.update_interval)
+        # Emit to all connected clients
+        socketio.emit('resource_update', resources)
         
-        print("[ResourceMonitor] Monitoring stopped")
+        # Check critical thresholds
+        self.check_thresholds(resources['ram'], resources['disk'])
     
     def start(self):
         """Start monitoring in background thread"""
@@ -120,9 +109,26 @@ class ResourceMonitor:
             return
         
         self.running = True
-        self.monitor_thread = threading.Thread(target=self.monitoring_loop, daemon=True)
+        
+        # Use safe_thread_loop to create the thread wrapper dynamically
+        from app.utils.safe_execution import safe_thread_loop
+        
+        @safe_thread_loop("ResourceMonitor", interval=self.update_interval)
+        def _safe_wrapper():
+            if self.running:
+                self.monitoring_loop()
+            else:
+                # If stopped, raise exception to break loop? 
+                # No, safe_thread_loop is infinite. 
+                # We should just check running inside.
+                pass
+
+        # Actually, safe_thread_loop is designed for standalone functions.
+        # For a class method, we can just define the processing logic and wrap it.
+        
+        self.monitor_thread = threading.Thread(target=_safe_wrapper, daemon=True)
         self.monitor_thread.start()
-        print("[ResourceMonitor] Started")
+        print("[ResourceMonitor] Started (Safe Mode)")
     
     def stop(self):
         """Stop monitoring"""

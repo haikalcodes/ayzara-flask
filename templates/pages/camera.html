@@ -371,6 +371,18 @@
             window.localStream = null;
         }
 
+        // [ANTIGRAVITY] Explicitly release backend camera
+        if (selectedCameraUrl && selectedCameraUrl !== 'local_client_device') {
+            console.log(">>> [Reset] Releasing backend camera:", selectedCameraUrl);
+            const data = JSON.stringify({ url: selectedCameraUrl });
+            fetch('/api/camera/release', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                keepalive: true,
+                body: data
+            }).catch(e => console.log('Reset release failed', e));
+        }
+
         // document.getElementById('capturedImage').classList.add('d-none');
         document.getElementById('feedbackArea').innerHTML = '';
 
@@ -519,8 +531,15 @@
             btnCheck.classList.remove('d-none');
             btnCheck.disabled = false;
             btnCheck.innerHTML = '<i class="bi bi-search me-2"></i>Check Camera';
-            document.getElementById('btnCapture').classList.add('d-none');
             document.getElementById('btnReset').classList.add('d-none');
+
+            // [ANTIGRAVITY] Error Feedback
+            Toast.fire({
+                icon: 'error',
+                title: 'Koneksi Gagal',
+                text: 'Kamera tidak dapat diakses'
+            });
+            playSound('error');
         };
 
         // --- LOCAL CAMERA LOGIC ---
@@ -555,6 +574,7 @@
 
                         // Hide zoom for local (not supported via web API easily yet)
                         document.getElementById('zoomContainer').classList.add('d-none');
+
                     };
                 })
                 .catch(err => {
@@ -596,6 +616,13 @@
             // Show zoom controls
             document.getElementById('zoomContainer').classList.remove('d-none');
             resetZoom();
+
+            // [ANTIGRAVITY] Success Feedback
+            Toast.fire({
+                icon: 'success',
+                title: 'Kamera Online'
+            });
+            playSound('success');
         };
 
         img.onerror = function () {

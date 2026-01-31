@@ -800,69 +800,9 @@
     });
 
     // ==========================================
-    // SOUND ENGINE (AudioContext)
+    // SOUND ENGINE (MOVED TO app_utils.js)
     // ==========================================
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-    function playTone(freq, type, duration, vol = 0.1) {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0, audioCtx.currentTime);
-        gain.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + duration);
-    }
-
-    function playSound(name) {
-        try {
-            switch (name) {
-                // 1. Scan Berhasil (Idle/Start) -> "Tit"
-                case 'start':
-                case 'beep':
-                    playTone(1500, 'sine', 0.1, 0.2);
-                    break;
-
-                // 2. Scan saat Recording -> "Tit" (Sama persis)
-                case 'scan_warning':
-                    playTone(1500, 'sine', 0.1, 0.2);
-                    break;
-
-                // 3. Recording START (Baru mulai rekam) -> "Blip-Blop" (Beda dari simpan)
-                case 'record_start':
-                    playTone(600, 'sine', 0.1, 0.2);
-                    setTimeout(() => playTone(800, 'sine', 0.15, 0.2), 100);
-                    break;
-
-                // 3. Simpan Video -> "Chime" (Bukan tit)
-                case 'save':
-                case 'success':
-                    playTone(523.25, 'sine', 0.2, 0.2); // C5
-                    setTimeout(() => playTone(659.25, 'sine', 0.2, 0.2), 100); // E5
-                    setTimeout(() => playTone(783.99, 'sine', 0.4, 0.2), 200); // G5
-                    break;
-
-                // Error
-                case 'error':
-                    playTone(150, 'sawtooth', 0.3, 0.2);
-                    break;
-
-                // Camera Connected -> "Ding-Dong" (Ascending chime)
-                case 'camera_connected':
-                    playTone(440, 'sine', 0.15, 0.15); // A4
-                    setTimeout(() => playTone(554.37, 'sine', 0.25, 0.15), 120); // C#5
-                    break;
-
-                default:
-                    playTone(440, 'sine', 0.1);
-            }
-        } catch (e) { console.error("Audio error:", e); }
-    }
+    // playSound() is now available globally from app_utils.js
 
     // Toggle green overlay to show active scanning
     function setScanVisual(active) {
@@ -1324,8 +1264,8 @@
         document.getElementById('camera-select-recording').classList.remove('is-invalid');
 
 
-        // 1. Set Mode to RECORD (High FPS)
-        updateCameraUsage('record', recordingCameraUrl);
+        // 1. Set Mode to RECORD (High FPS) - REMOVED to prevent premature init
+        // updateCameraUsage('record', recordingCameraUrl);
 
         // CRITICAL FIX: Stop preview first to clear cache and reset state
         // [ANTIGRAVITY] IMMEDIATE FEEDBACK: Show overlay BEFORE awaiting stop
@@ -2593,7 +2533,7 @@
                 }
 
                 // Prominent alert for emphasis
-                Swal.fire({
+                showSafeDialog({
                     icon: 'error',
                     title: 'RESI TIDAK COCOK!',
                     background: '#0a0a12',
@@ -2602,8 +2542,12 @@
                         <div class="text-start">
                             <p>Anda sedang merekam resi: <br><strong>${currentResi}</strong></p>
                             <p>Tapi yang baru saja di-scan: <br><strong class="text-danger">${resi}</strong></p>
-                            <hr>
-                            <p class="mb-0 small text-muted">Silakan scan ulang resi <strong>${currentResi}</strong> untuk menghentikan rekaman ini, atau klik tombol "Stop & Simpan".</p>
+                            <div class="alert alert-dark border border-secondary p-2 mt-2">
+                                <small class="text-warning">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Tips: Scan ulang resi <strong>${currentResi}</strong> untuk stop otomatis.
+                                </small>
+                            </div>
                         </div>
                     `,
                     confirmButtonText: 'Saya Mengerti',
@@ -2617,7 +2561,7 @@
         if (!selectedPlatform) {
             playSound('error');
             speakText('rekaman_gagal'); // Platform not selected
-            Swal.fire({
+            showSafeDialog({
                 icon: 'warning',
                 title: 'Platform Belum Dipilih',
                 text: 'Harap pilih platform terlebih dahulu sebelum melakukan scanning!',
@@ -2632,7 +2576,7 @@
             playSound('error');
             speakText('rekaman_gagal'); // Camera not connected
 
-            Swal.fire({
+            showSafeDialog({
                 icon: 'warning',
                 title: 'Kamera Belum Dipilih',
                 text: 'Harap hubungkan kamera yang aktif terlebih dahulu!',
@@ -2754,8 +2698,16 @@
         }
 
         updateStatus('💾 Menyimpan rekaman...');
-        Toast.fire({
-            title: '🔃 Menyimpan Rekaman',
+
+        // [ANTIGRAVITY] Show Loading Dialog
+        Swal.fire({
+            title: 'Menyimpan Rekaman...',
+            html: 'Mohon tunggu sebentar.<br>Sedang memproses video...',
+            allowOutsideClick: false,
+            showConfirmButton: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
         });
 
 
@@ -2905,42 +2857,63 @@
         console.log(">>> [UI] Cancel button clicked. ID:", recordingId);
         if (!recordingId) return;
 
-        if (!confirm('Yakin ingin membatalkan rekaman ini? File tidak akan disimpan.')) return;
-
-        fetch('/api/recording/cancel', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ recording_id: recordingId })
-        })
-            .then(res => res.json())
-            .then(data => {
-                // CRITICAL: Reset recording state
-                isRecording = false;
-                recordingId = null;
-                currentResi = null;
-
-                resetUI();
-                updateStatus('❌ Rekaman dibatalkan');
-
-                // Show cancel toast notification
-                Toast.fire({
-                    icon: 'warning',
-                    title: '🗑️ Rekaman Dibatalkan',
-                    text: 'Video tidak disimpan'
+        Swal.fire({
+            title: 'Batalkan Rekaman?',
+            text: "Video TIDAK akan disimpan. Yakin ingin membatalkan?",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Ya, Batalkan!',
+            cancelButtonText: 'Tidak'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Show loading
+                Swal.fire({
+                    title: 'Membatalkan...',
+                    allowOutsideClick: false,
+                    showConfirmButton: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
                 });
 
-                // Voice notification
-                speakText('rekaman_gagal'); // No specific 'cancelled' audio, use 'gagal'
+                fetch('/api/recording/cancel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ recording_id: recordingId })
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        // CRITICAL: Reset recording state
+                        isRecording = false;
+                        recordingId = null;
+                        currentResi = null;
 
-                // Restore scanner if needed
-                if (document.querySelector('input[name="input-method"]:checked').value === 'scanner') {
-                    document.getElementById('resi-input').focus();
-                }
-            })
-            .catch(err => {
-                console.error(">>> [UI] Cancel fetch error:", err);
-                alert("Gagal membatalkan: " + err.message);
-            });
+                        resetUI();
+                        updateStatus('❌ Rekaman dibatalkan');
+
+                        // Show cancel toast notification
+                        Toast.fire({
+                            icon: 'warning',
+                            title: '🗑️ Rekaman Dibatalkan',
+                            text: 'Video tidak disimpan'
+                        });
+
+                        // Voice notification
+                        speakText('rekaman_gagal'); // No specific 'cancelled' audio, use 'gagal'
+
+                        // Restore scanner if needed
+                        if (document.querySelector('input[name="input-method"]:checked').value === 'scanner') {
+                            document.getElementById('resi-input').focus();
+                        }
+                    })
+                    .catch(err => {
+                        console.error(">>> [UI] Cancel fetch error:", err);
+                        Swal.fire('Gagal', "Gagal membatalkan: " + err.message, 'error');
+                    });
+            } // End if confirmed
+        }); // End then
     }
 
     function redoRecording() {
