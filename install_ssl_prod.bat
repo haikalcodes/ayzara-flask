@@ -86,7 +86,7 @@ echo.
 echo if %%RETRY_COUNT%% GEQ %%MAX_RETRIES%% ^(
 echo     echo.
 echo     echo ==================================================
-echo     echo [CRITICAL] TOO MANY CRASHES ^(%%RETRY_COUNT%% in a row^^).
+echo     echo [CRITICAL] TOO MANY CRASHES ^(%%RETRY_COUNT%% in a row^).
 echo     echo [SYSTEM] Auto-restart stopped to protect the system.
 echo     echo ==================================================
 echo     color 0C

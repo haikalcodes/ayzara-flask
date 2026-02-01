@@ -46,7 +46,7 @@ set /a RETRY_COUNT+=1
 if %RETRY_COUNT% GEQ %MAX_RETRIES% (
     echo.
     echo ==================================================
-    echo [CRITICAL] TOO MANY CRASHES (%RETRY_COUNT% in a row^).
+    echo [CRITICAL] TOO MANY CRASHES (%RETRY_COUNT% in a row).
     echo [SYSTEM] Auto-restart stopped to protect the system.
     echo ==================================================
     color 0C
@@ -56,7 +56,7 @@ if %RETRY_COUNT% GEQ %MAX_RETRIES% (
     goto end
 )
 
-echo [INFO] Press any key to restart...
+echo [INFO] Restarting in 5 seconds...
 echo.
 pause
 goto start_server
