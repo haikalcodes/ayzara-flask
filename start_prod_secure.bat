@@ -1,5 +1,6 @@
 @echo off
 setlocal
+cd /d "%~dp0"
 title Ayzara Production Server (HTTPS/Gevent)
 color 0A
 
