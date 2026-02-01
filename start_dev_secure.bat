@@ -1,5 +1,4 @@
 @echo off
-cd /d "%~dp0"
 title Ayzara Secure Server (HTTPS)
 color 0B
 
@@ -25,8 +24,8 @@ if not exist "ssl\cert.pem" (
 
 :start_app
 echo.
-echo [INFO] Starting Application...
-echo [INFO] Browser will open automatically in 3 seconds...
+[INFO] Starting Application...
+[INFO] Browser will open automatically in 3 seconds...
 start /min cmd /c "timeout /t 3 >nul && start https://localhost:5000"
 python run_dev_secure.py
 

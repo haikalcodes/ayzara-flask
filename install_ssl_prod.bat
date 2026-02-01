@@ -39,31 +39,72 @@ echo.
 echo [INFO] Creating start_prod_secure.bat...
 (
 echo @echo off
-echo title Ayzara Production Server (HTTPS/Gevent^)
+echo setlocal
+echo cd /d "%%~dp0"
+echo title Ayzara Production Server ^(HTTPS/Gevent^)
 echo color 0A
 echo.
-echo ==================================================
-echo   STARTING AYZARA PRODUCTION SERVER (HTTPS^)
-echo   Engine: Gevent
-echo   Certificates: .\ssl\
-echo ==================================================
+echo :: Initialize Crash Counter
+echo set RETRY_COUNT=0
+echo set MAX_RETRIES=3
 echo.
 echo :check_venv
-echo if exist "venv\Scripts\activate.bat" (
+echo if exist "venv\Scripts\activate.bat" ^(
 echo     echo [INFO] Activating Virtual Environment...
 echo     call venv\Scripts\activate.bat
 echo ^)
 echo.
-echo :start_app
+echo :start_server
 echo echo.
-echo [INFO] Starting Application...
+echo echo ==================================================
+echo echo   AYZARA PRODUCTION SERVER ^(HTTPS^)
+echo echo   Attempt: %%RETRY_COUNT%% / %%MAX_RETRIES%%
+echo echo ==================================================
+echo.
+echo :: Open Browser logic: ONLY if this is the first run ^(RETRY_COUNT is 0^)
+echo if %%RETRY_COUNT%% EQU 0 ^(
+echo     echo [INFO] Browser will open automatically in 5 seconds...
+echo     REM Launches a separate mini-window that waits 5s then opens the URL
+echo     start /min cmd /c "timeout /t 5 >nul && start https://localhost:5000"
+echo ^)
+echo.
+echo :: Run the Server ^(Blocking^)
 echo python run_prod.py
 echo.
+echo :: Check output
+echo if %%ERRORLEVEL%% EQU 0 ^(
+echo     echo.
+echo     echo [INFO] Server stopped manually ^(Clean Exit^).
+echo     goto end
+echo ^)
+echo.
+echo :: Crash Handling
 echo echo.
-echo echo [WARNING] Server stopped unexpectedly!
+echo echo [WARNING] Server crashed with Code: %%ERRORLEVEL%%
+echo set /a RETRY_COUNT+=1
+echo.
+echo if %%RETRY_COUNT%% GEQ %%MAX_RETRIES%% ^(
+echo     echo.
+echo     echo ==================================================
+echo     echo [CRITICAL] TOO MANY CRASHES ^(%%RETRY_COUNT%% in a row^^).
+echo     echo [SYSTEM] Auto-restart stopped to protect the system.
+echo     echo ==================================================
+echo     color 0C
+echo     echo.
+echo     echo Please check the error logs above.
+echo     pause
+echo     goto end
+echo ^)
+echo.
 echo echo [INFO] Restarting in 5 seconds...
-echo timeout /t 5
-echo goto start_app
+echo echo.
+echo pause
+echo goto start_server
+echo.
+echo :end
+echo echo.
+echo echo [INFO] Session ended.
+echo pause
 ) > start_prod_secure.bat
 
 echo.

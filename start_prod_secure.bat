@@ -24,7 +24,7 @@ echo ==================================================
 :: Open Browser logic: ONLY if this is the first run (RETRY_COUNT is 0)
 if %RETRY_COUNT% EQU 0 (
     echo [INFO] Browser will open automatically in 5 seconds...
-    :: Launches a separate mini-window that waits 5s then opens the URL
+    REM Launches a separate mini-window that waits 5s then opens the URL
     start /min cmd /c "timeout /t 5 >nul && start https://localhost:5000"
 )
 
@@ -46,7 +46,7 @@ set /a RETRY_COUNT+=1
 if %RETRY_COUNT% GEQ %MAX_RETRIES% (
     echo.
     echo ==================================================
-    echo [CRITICAL] TOO MANY CRASHES (%RETRY_COUNT% in a row).
+    echo [CRITICAL] TOO MANY CRASHES (%RETRY_COUNT% in a row^).
     echo [SYSTEM] Auto-restart stopped to protect the system.
     echo ==================================================
     color 0C
@@ -56,9 +56,9 @@ if %RETRY_COUNT% GEQ %MAX_RETRIES% (
     goto end
 )
 
-echo [INFO] Restarting in 5 seconds...
+echo [INFO] Press any key to restart...
 echo.
-timeout /t 5
+pause
 goto start_server
 
 :end

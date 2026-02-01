@@ -46,11 +46,20 @@ if __name__ == '__main__':
         }
         protocol = "https"
     
+    # Detect IP
+    import socket
+    try:
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+    except:
+        local_ip = "127.0.0.1"
+
     print(f"\n{'='*60}")
     print(f"   AYZARA DASHBOARD - PRODUCTION MODE (Stable)")
     print(f"   v{config.APP_VERSION}")
     print(f"{'='*60}")
-    print(f"   >> Access Connect : {protocol}://<IP-SERVER>:{port}")
+    print(f"   >> Local Access   : {protocol}://localhost:{port}")
+    print(f"   >> Network Access : {protocol}://{local_ip}:{port}")
     print(f"   >> Engine         : Gevent (Async/Monkey Patched)")
     if ssl_args:
         print(f"   >> Security       : SSL/TLS Enabled")
