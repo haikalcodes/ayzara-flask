@@ -22,7 +22,8 @@ def rekam_packing():
     """Packing recording page"""
     return render_template('pages/recording.html',
         platforms=config.PLATFORMS,
-        default_rtsp_url=config.DEFAULT_RTSP_URL
+        default_rtsp_url=config.DEFAULT_RTSP_URL,
+        max_recording_duration=config.MAX_RECORDING_DURATION
     )
 
 
@@ -108,21 +109,35 @@ def api_recordings_active():
     import time
     
     with recording_lock:
-        # Check active recordings
+        # Check active recordings for CURRENT USER
         if active_recordings:
-            # Get the first one (assuming single user/station for now)
-            # Or filter by user_id if we had that in memory dict
-            rid = list(active_recordings.keys())[0]
-            info = active_recordings[rid]
+            # Filter by current logged in user
+            # Try 'nama' first (Pegawai model), then 'username' (User model)
+            current_pegawai = getattr(current_user, 'nama', getattr(current_user, 'username', None))
             
-            return jsonify({
-                'active': True,
-                'recording_id': rid,
-                'resi': info['resi'],
-                'platform': info.get('platform') or 'Unknown',
-                'start_time': info['start_time'],
-                'duration': time.time() - info['start_time']
-            })
+            target_rid = None
+            target_info = None
+            
+            for rid, info in active_recordings.items():
+                # If we can match the pegawai name, great
+                if current_pegawai and info.get('pegawai') == current_pegawai:
+                    target_rid = rid
+                    target_info = info
+                    break
+            
+            # If no user-specific recording found, check if there's ANY recording 
+            # (but don't block UNLESS it's the same camera - handled in start_recording)
+            # For UI 'Active' state, we only care about OUR recording.
+            
+            if target_info:
+                return jsonify({
+                    'active': True,
+                    'recording_id': target_rid,
+                    'resi': target_info['resi'],
+                    'platform': target_info.get('platform') or 'Unknown',
+                    'start_time': target_info['start_time'],
+                    'duration': time.time() - target_info['start_time']
+                })
         
         return jsonify({'active': False})
 

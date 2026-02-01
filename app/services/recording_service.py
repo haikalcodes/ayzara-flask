@@ -16,6 +16,13 @@ import cv2
 import subprocess
 from app.utils.logger import video_logger, audit_logger, get_trace_id
 
+# [ANTIGRAVITY] GEVENT THREADPOOL
+import gevent
+from gevent.threadpool import ThreadPool
+# current_app removed as it was only for auto-stop monitor
+
+_rec_pool = ThreadPool(10) # 10 threads for recording writes
+
 
 # ============================================
 # RECORDING STATE MANAGEMENT
@@ -38,6 +45,7 @@ class RecordingService:
         """
         self.db = db_instance
         self.PackingRecord = packing_record_model
+
     
     def get_active_recording(self):
         """
@@ -128,10 +136,11 @@ class RecordingService:
                 return
 
             h, w = frame.shape[:2]
-            fps = 20.0
+            fps = 30.0  # MATCH CAMERA FPS for 1:1 capture
             
             # MJPEG Writer (100% reliable in OpenCV)
             fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+            # [ANTIGRAVITY] Direct Blocking Init (Safe in Worker Thread)
             out = cv2.VideoWriter(temp_path, fourcc, fps, (w, h))
             
             if not out.isOpened():
@@ -146,20 +155,23 @@ class RecordingService:
             
             try:
                 while not stop_event.is_set():
+                    # SYNC STRATEGY: Poll faster than FPS, write only new frames
                     current_ts = camera.last_update
+                    
                     if current_ts > last_ts:
                         frame = camera.get_raw_frame()
                         if frame is not None:
+                            # [ANTIGRAVITY] Direct Blocking Write (Safe in Worker Thread)
                             out.write(frame)
+                            
                             last_ts = current_ts
                             frames_written += 1
-                            # if frames_written % 30 == 0:
-                            #     print(f"[Recording] {recording_id}: Written {frames_written} frames")
-                            time.sleep(1.0/fps)
-                        else:
-                            time.sleep(0.01)
+                            # Burst protection: If we write a frame, don't sleep essentially, 
+                            # just yield to let other threads run
+                            time.sleep(0.001) 
                     else:
-                        time.sleep(0.005)
+                        # Wait for new frame (poll)
+                        time.sleep(0.005) # 5ms poll is fast enough for 30fps (33ms)
             except Exception as e:
                 print(f"[Recording] ❌ Loop error: {e}")
             finally:
@@ -174,42 +186,68 @@ class RecordingService:
             if os.path.exists(temp_path) and frames_written > 0:
                 print(f"[Recording] Converting to H.264 MP4: {output_path}")
                 
-                # FFmpeg command with optimized compression and compatibility
-                # CRF 23 = Good quality/size balance
-                # preset medium = Balanced speed
-                # pix_fmt yuv420p = REQUIRED for browser playback
-                # scale filter = REQUIRED for H.264 (dimensions must be divisible by 2)
+                # FFmpeg command - OPTIMIZED for speed and lower resource usage
+                # CRF 26 = Good quality, smaller files (was 23)
+                # preset veryfast = 3x faster encoding (was medium)
+                # threads 2 = Limit CPU usage
+                # max_muxing_queue_size = Prevent buffer overflow
                 cmd = [
                     'ffmpeg', '-y',
                     '-i', temp_path,
-                    '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', # Force even dimensions
+                    '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',  # Force even dimensions
                     '-c:v', 'libx264',
-                    '-preset', 'medium',
-                    '-crf', '23',
+                    '-preset', 'veryfast',  # Faster encoding
+                    '-crf', '26',  # Lower quality = smaller files, still good
                     '-pix_fmt', 'yuv420p',
                     '-movflags', '+faststart',
+                    '-threads', '2',  # Limit CPU usage
+                    '-max_muxing_queue_size', '1024',  # Prevent buffer overflow
                     output_path
                 ]
                 
                 print(f"[Recording] Running FFmpeg: {' '.join(cmd)}")
 
-                # Run FFmpeg
-                process = subprocess.run(
-                    cmd, 
-                    stdout=subprocess.PIPE, 
-                    stderr=subprocess.PIPE,
-                    timeout=60  # 60 second timeout
-                )
+                # Run FFmpeg with lower priority (Windows)
+                import sys
+                if sys.platform == 'win32':
+                    process = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        creationflags=subprocess.BELOW_NORMAL_PRIORITY_CLASS
+                    )
+                else:
+                    process = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    )
                 
-                if process.returncode == 0:
+                # Wait 0.5s for FFmpeg to open the file
+                time.sleep(0.5)
+                
+                # Delete temp file EARLY while FFmpeg is reading it
+                # FFmpeg keeps file handle open, so it can still read
+                try:
+                    os.remove(temp_path)
+                    print(f"[Recording] ✅ Temp file deleted early (FFmpeg still reading)")
+                except Exception as e:
+                    print(f"[Recording] Temp file locked by FFmpeg: {e}")
+                
+                # Wait for FFmpeg to finish
+                stdout, stderr = process.communicate(timeout=60)
+                returncode = process.returncode
+                
+                if returncode == 0:
                     print(f"[Recording] ✅ Conversion SUCCESS!")
                     
-                    # Remove temp file
-                    try:
-                        os.remove(temp_path)
-                        print(f"[Recording] Temp file removed: {temp_path}")
-                    except Exception as e:
-                        print(f"[Recording] Warning: Could not remove temp file: {e}")
+                    # Final cleanup if temp file still exists
+                    if os.path.exists(temp_path):
+                        try:
+                            os.remove(temp_path)
+                            print(f"[Recording] Final cleanup: Removed temp file")
+                        except:
+                            pass
                     
                     # Verify final file
                     if os.path.exists(output_path):
@@ -218,7 +256,7 @@ class RecordingService:
                     else:
                         print(f"[Recording] ❌ Final file missing after conversion!")
                 else:
-                    error_msg = process.stderr.decode('utf-8', errors='ignore')
+                    error_msg = stderr.decode('utf-8', errors='ignore')
                     print(f"[Recording] ❌ FFmpeg conversion FAILED!")
                     print(f"[Recording] Command: {' '.join(cmd)}")
                     print(f"[Recording] Error Output:\n{error_msg}")
@@ -253,10 +291,16 @@ class RecordingService:
         Returns:
             Tuple of (success, message, recording_id)
         """
-        # Check if there's already an active recording
-        active = self.get_active_recording()
-        if active:
-            return False, "Ada rekaman yang sedang berjalan", None
+        # Check if THIS CAMERA is already recording
+        with recording_lock:
+            for rid, info in active_recordings.items():
+                # Normalize to string for comparison (user might send int 0 or str "0")
+                if str(info.get('camera_url')) == str(camera_url):
+                    return False, f"Kamera {camera_url} sedang digunakan untuk merekam", None
+        
+        # [ANTIGRAVITY] ALLOW MULTIPLE RECORDINGS
+        # We removed the global self.get_active_recording() check here.
+
         
         try:
             # Create database record
@@ -283,12 +327,14 @@ class RecordingService:
             stop_event = threading.Event()
             recording_id = f"rec_{record.id}_{int(time.time())}"
             
-            t = threading.Thread(
-                target=self._record_video_thread,
-                args=(recording_id, camera_url, output_path, stop_event)
-            )
-            t.daemon = True
-            t.start()
+            # [ANTIGRAVITY] THREAD AFFINITY FIX
+            # Use real worker thread instead of Greenlet/ThreadPool.apply wrapper
+            # Capture the AsyncResult so we can wait for it later!
+            async_result = _rec_pool.apply_async(self._record_video_thread, args=(recording_id, camera_url, output_path, stop_event))
+            
+            # NOTE: We don't get a handle to the thread easily with apply_async.
+            # But we use stop_event to control it.
+            # The 't' variable is less useful now, but we keep the dict structure valid.
             
 
             
@@ -304,7 +350,7 @@ class RecordingService:
                     'output_path': output_path,
                     'start_time': time.time(),
                     'stop_event': stop_event,
-                    'thread': t
+                    'thread': async_result 
                 }
             
             audit_logger.info(f"RECORDING STARTED", extra={'context': {'resi': resi, 'pegawai': pegawai, 'rec_id': recording_id}})
@@ -343,8 +389,15 @@ class RecordingService:
             # Stop the thread
             if 'stop_event' in rec_info:
                 rec_info['stop_event'].set()
-                if 'thread' in rec_info:
-                     rec_info['thread'].join(timeout=5.0) # Wait up to 5s
+                rec_info['stop_event'].set()
+                if 'thread' in rec_info and rec_info['thread']:
+                     try:
+                        # Wait for thread to finish (including FFmpeg)
+                        # This yields to other greenlets, so it's safe.
+                        # We give it plenty of time (e.g. 60s) for encoding.
+                        rec_info['thread'].get(timeout=60.0)
+                     except Exception as e:
+                        video_logger.error(f"Waiting for recording thread failed: {e}")
             
             # Get database record
             record = self.PackingRecord.query.get(rec_info['db_id'])
@@ -363,18 +416,9 @@ class RecordingService:
                 import config
                 from pathlib import Path
                 
-                if video_path_abs:
-                    try:
-                        abs_path = Path(video_path_abs)
-                        base_path = Path(config.RECORDINGS_FOLDER)
-                        video_path_rel = abs_path.relative_to(base_path)
-                        video_path_str = str(video_path_rel).replace('\\', '/')
-                        print(f"[Recording] Path: {video_path_abs} -> {video_path_str}")
-                    except Exception as e:
-                        print(f"[Recording] Path conversion failed: {e}")
-                        video_path_str = video_path_abs
-                else:
-                    video_path_str = None
+                # [ANTIGRAVITY] ABSOLUTE PATH STORAGE
+                # Store full path to ensure files are found even if storage config changes drives
+                video_path_str = video_path_abs.replace('\\', '/') if video_path_abs else None
                 
                 # Check if file exists
                 if video_path_abs and os.path.exists(video_path_abs):
@@ -394,11 +438,8 @@ class RecordingService:
                         json_path_abs, file_hash = generate_metadata_json(
                             record.to_dict(), video_path_abs, record.durasi_detik, record.file_size_kb
                         )
-                        try:
-                            json_rel = Path(json_path_abs).relative_to(base_path)
-                            json_path_str = str(json_rel).replace('\\', '/')
-                        except:
-                            json_path_str = json_path_abs
+                        # Store absolute path for metadata too
+                        json_path_str = json_path_abs.replace('\\', '/')
                             
                         record.json_metadata_path = json_path_str
                         record.sha256_hash = file_hash

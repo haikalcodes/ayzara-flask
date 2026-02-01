@@ -343,7 +343,7 @@
     <div class="col-md-8">
 
         <!-- TOP: SCANNER PREVIEW / INPUT -->
-        <div class="card mb-3 border-primary shadow-sm">
+        <div id="scanning-card-container" class="card mb-3 border-primary shadow-sm">
             <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                 <h6 class="mb-0"><i class="bi bi-upc-scan me-2"></i>Scanner Area</h6>
                 <span class="badge text-white" id="scan-status-badge" style="background-color: #FF6B35;">Ready</span>
@@ -386,11 +386,44 @@
                     style="background: rgba(40, 167, 69, 0.1); border: 4px solid #28a745; z-index: 50; pointer-events: none;">
                 </div>
 
+                <!-- [ANTIGRAVITY] NEW: Scan Timer Overlay (Synced with Recording) -->
+                <div id="scan-recording-timer"
+                    class="position-absolute d-none font-monospace fw-bold text-white px-2 py-1 rounded"
+                    style="top: 10px; right: 10px; background: rgba(0,0,0,0.6); z-index: 60; font-size: 1.2rem;">
+                    00:00
+                </div>
+
+                <!-- [ANTIGRAVITY] NEW: Scanner Zoom Controls -->
+                <div id="scan-zoom-container" class="zoom-controls d-none" style="bottom: 15px; right: 15px;">
+                    <button class="zoom-btn" onclick="adjustScanZoom(0.5)" title="Zoom In (Backend)">
+                        <i class="bi bi-plus-lg"></i>
+                    </button>
+                    <button class="zoom-btn" onclick="resetScanZoom()" title="Reset Zoom">
+                        <i class="bi bi-aspect-ratio"></i>
+                    </button>
+                    <button class="zoom-btn" onclick="adjustScanZoom(-0.5)" title="Zoom Out (Backend)">
+                        <i class="bi bi-dash-lg"></i>
+                    </button>
+                </div>
+                <div id="scan-zoom-indicator" class="zoom-info" style="bottom: 70px;">Zoom: 1.0x</div>
+
+            </div>
+        </div>
+
+        <!-- [ANTIGRAVITY] NEW: Scan Card Footer with Actions -->
+        <div class="card-footer d-none" id="scan-card-footer">
+            <div class="d-flex gap-2 justify-content-center">
+                <button id="btn-stop-scan" class="btn btn-danger flex-grow-1" onclick="stopRecording()">
+                    <i class="bi bi-check-circle-fill me-1"></i> Selesai & Simpan
+                </button>
+                <button id="btn-cancel-scan" class="btn btn-outline-secondary flex-grow-1" onclick="cancelRecording()">
+                    <i class="bi bi-x-lg me-1"></i> Batal
+                </button>
             </div>
         </div>
 
         <!-- BOTTOM: RECORDING PREVIEW -->
-        <div class="card mb-3">
+        <div id="recording-card-container" class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5>3. Rekam Video (Bukti)</h5>
                 <div id="recording-timer" class="h4 mb-0 font-monospace d-none">00:00</div>
@@ -452,26 +485,31 @@
             </div>
         </div>
 
-        <!-- Last Recording Info -->
-        <div class="card" id="last-recording-card" style="display: none;">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <div>
-                    <h6 class="text-success mb-1"><i class="bi bi-check-circle-fill me-1"></i> Rekaman Terakhir Disimpan
-                    </h6>
-                    <small id="last-record-detail" class="text-muted">RESI... • DURASI...</small>
-                </div>
-                <div>
-                    <button class="btn btn-sm btn-outline-danger" onclick="redoRecording()">
-                        <i class="bi bi-arrow-clockwise me-1"></i> Redo (Rekam Ulang)
-                    </button>
-                    <button class="btn btn-sm text-white" id="btn-view-last" onclick="viewLastRecording()"
-                        style="background-color: #FF6B35;">
-                        <i class="bi bi-eye me-1"></i> Lihat
-                    </button>
-                </div>
+
+    </div>
+
+
+
+    <!-- Last Recording Info -->
+    <div class="card" id="last-recording-card" style="display: none;">
+        <div class="card-body d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="text-success mb-1"><i class="bi bi-check-circle-fill me-1"></i> Rekaman Terakhir Disimpan
+                </h6>
+                <small id="last-record-detail" class="text-muted">RESI... • DURASI...</small>
+            </div>
+            <div>
+                <button class="btn btn-sm btn-outline-danger" onclick="redoRecording()">
+                    <i class="bi bi-arrow-clockwise me-1"></i> Redo (Rekam Ulang)
+                </button>
+                <button class="btn btn-sm text-white" id="btn-view-last" onclick="viewLastRecording()"
+                    style="background-color: #FF6B35;">
+                    <i class="bi bi-eye me-1"></i> Lihat
+                </button>
             </div>
         </div>
     </div>
+</div>
 </div>
 
 <!-- FAB Navigation -->
@@ -577,7 +615,8 @@
     type="text/javascript"></script>
 <script>
     // Configuration
-    const SCAN_RATE = 700; // Barcode scan rate (ms) - quicker polling for easier detect
+    // [ANTIGRAVITY] OPTIMIZATION: Reduced from 700ms to 250ms for "Instant" feel
+    const SCAN_RATE = 100; // Barcode scan rate (ms) - quicker polling for easier detect
     const RECORDING_START_GRACE_PERIOD = 5000; // 5 seconds - don't stop immediately after start
     const BARCODE_COOLDOWN = 3000; // 3 seconds - cooldown between barcode detections
 
@@ -598,6 +637,7 @@
 
     // Scanner
     let html5QrCode = null; // Local scanner instance
+    let scanningZoomLevel = 1.0; // [ANTIGRAVITY] New state for scanner zoom
     let isLocalScanActive = false; // Flag for local scanner state
     let lastBarcodeDetectTime = 0; // For cooldown
     let scanVisualEl = null; // Green scanning overlay
@@ -769,69 +809,9 @@
     });
 
     // ==========================================
-    // SOUND ENGINE (AudioContext)
+    // SOUND ENGINE (MOVED TO app_utils.js)
     // ==========================================
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-    function playTone(freq, type, duration, vol = 0.1) {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0, audioCtx.currentTime);
-        gain.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + duration);
-    }
-
-    function playSound(name) {
-        try {
-            switch (name) {
-                // 1. Scan Berhasil (Idle/Start) -> "Tit"
-                case 'start':
-                case 'beep':
-                    playTone(1500, 'sine', 0.1, 0.2);
-                    break;
-
-                // 2. Scan saat Recording -> "Tit" (Sama persis)
-                case 'scan_warning':
-                    playTone(1500, 'sine', 0.1, 0.2);
-                    break;
-
-                // 3. Recording START (Baru mulai rekam) -> "Blip-Blop" (Beda dari simpan)
-                case 'record_start':
-                    playTone(600, 'sine', 0.1, 0.2);
-                    setTimeout(() => playTone(800, 'sine', 0.15, 0.2), 100);
-                    break;
-
-                // 3. Simpan Video -> "Chime" (Bukan tit)
-                case 'save':
-                case 'success':
-                    playTone(523.25, 'sine', 0.2, 0.2); // C5
-                    setTimeout(() => playTone(659.25, 'sine', 0.2, 0.2), 100); // E5
-                    setTimeout(() => playTone(783.99, 'sine', 0.4, 0.2), 200); // G5
-                    break;
-
-                // Error
-                case 'error':
-                    playTone(150, 'sawtooth', 0.3, 0.2);
-                    break;
-
-                // Camera Connected -> "Ding-Dong" (Ascending chime)
-                case 'camera_connected':
-                    playTone(440, 'sine', 0.15, 0.15); // A4
-                    setTimeout(() => playTone(554.37, 'sine', 0.25, 0.15), 120); // C#5
-                    break;
-
-                default:
-                    playTone(440, 'sine', 0.1);
-            }
-        } catch (e) { console.error("Audio error:", e); }
-    }
+    // playSound() is now available globally from app_utils.js
 
     // Toggle green overlay to show active scanning
     function setScanVisual(active) {
@@ -844,13 +824,22 @@
     }
 
     // Helper: update camera usage purpose on server (preview/scan/record)
-    function updateCameraUsage(purpose) {
-        if (!selectedCameraUrl || !purpose) return;
-        fetch('/api/camera/usage', {
+    function updateCameraUsage(purpose, specificUrl = null) {
+        // Use specific URL if provided, otherwise default to selected (recorder)
+        const targetUrl = specificUrl || selectedCameraUrl;
+
+        if (!targetUrl || !purpose) return;
+
+        console.log(`>>> [Mode] Setting ${purpose} for ${targetUrl}`);
+
+        fetch('/api/camera/mode', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: selectedCameraUrl, purpose: purpose })
-        }).catch(e => console.log('updateCameraUsage failed', e));
+            body: JSON.stringify({ url: targetUrl, mode: purpose })
+        }).catch(e => console.log('updateCameraMode failed', e));
+
+        // Also call legacy usage endpoint for compatibility if needed
+        // fetch('/api/camera/usage', ... 
     }
 
     // Getter alias for backward compatibility code
@@ -883,6 +872,50 @@
             // ... socket logic ...
             if (window.socket && window.socket.connected) {
                 console.log(">>> [Recording Page] Socket is ready!");
+
+                // [ANTIGRAVITY] Listen for critical camera errors from backend
+                window.socket.off('camera_error'); // Remove old listeners to prevent duplicates
+                window.socket.on('camera_error', function (data) {
+                    console.error(">>> [Socket] CAMERA ERROR:", data);
+
+                    // Show error UI immediately
+                    const url = data.url;
+
+                    // Helper for robust comparison
+                    const normalize = (u) => u ? u.trim() : '';
+                    const isMatch = (target) => normalize(url) === normalize(target);
+
+                    console.warn(`[Socket] ERROR CHECK: Incoming=${url}`);
+                    console.log(`[Socket] vs Rec: ${recordingCameraUrl} (Match? ${isMatch(recordingCameraUrl)})`);
+                    console.log(`[Socket] vs Scan: ${scanningCameraUrl} (Match? ${isMatch(scanningCameraUrl)})`);
+
+                    if (isMatch(recordingCameraUrl) || isMatch(scanningCameraUrl)) {
+                        console.warn(">>> [Socket] TRIGGERING DISCONNECT UI");
+
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Koneksi Kamera Putus',
+                            text: 'Kamera tidak merespon/mati (Stream ends prematurely). Silakan hubungkan ulang.',
+                            footer: `<small>${data.error || 'Connection lost'}</small>`,
+                            confirmButtonColor: '#d33',
+                            timer: 5000
+                        });
+
+                        // Force UI reset for that camera
+                        if (isMatch(recordingCameraUrl)) {
+                            showDisconnectUI();
+                            document.getElementById('btn-connect-rec').innerHTML = '<i class="bi bi-arrow-clockwise"></i> Reload';
+                        }
+                        if (isMatch(scanningCameraUrl)) {
+                            console.warn(">>> [Socket] Showing Scanner Disconnect UI");
+                            showScannerDisconnectUI();
+                        }
+
+                        playSound('error');
+                    } else {
+                        console.warn(">>> [Socket] NO MATCH FOUND FOR ERROR URL");
+                    }
+                });
             } else {
                 setTimeout(waitForSocket, 500);
             }
@@ -987,11 +1020,9 @@
         }).catch(e => console.log('Heartbeat failed', e));
     }
 
-    function stopPreview(force = false) {
+    async function stopPreview(force = false) {
         stopHeartbeat(); // Stop pulse immediately
         if (healthCheckInterval) clearInterval(healthCheckInterval);
-        // DO NOT clear barcodeLoopInterval here. That belongs to the Scanner logic.
-        // if (barcodeLoopInterval) clearTimeout(barcodeLoopInterval);
 
         const img = document.getElementById('camera-feed');
         if (img) {
@@ -1000,7 +1031,6 @@
         }
 
         // Explicitly tell server to stop this camera stream
-        // SHARED CAMERA FIX: Only release if NOT used by scanner
         if (selectedCameraUrl) {
             if (!force && selectedCameraUrl === scanningCameraUrl) {
                 console.log(">>> [Preview] Skipping release: Camera shared with Scanner");
@@ -1008,22 +1038,43 @@
             }
 
             const data = JSON.stringify({ url: selectedCameraUrl });
-            // Use sendBeacon for reliability during unload, or fetch if available
-            if (navigator.sendBeacon) {
-                const blob = new Blob([data], { type: 'application/json' });
-                navigator.sendBeacon('/api/camera/release', blob);
-            } else {
-                fetch('/api/camera/release', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: data
-                }).catch(e => console.log('Release failed', e));
+
+            // [ANTIGRAVITY] RACE CONDITION FIX:
+            // Always await the release to ensure server processes it BEFORE we try to reconnect.
+            // Use fetch with keepalive. Avoid sendBeacon unless truly unloading (force=true).
+            try {
+                if (force && navigator.sendBeacon) {
+                    const blob = new Blob([data], { type: 'application/json' });
+                    navigator.sendBeacon('/api/camera/release', blob);
+                } else {
+                    await fetch('/api/camera/release', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: data,
+                        keepalive: true
+                    });
+                    console.log(">>> [Preview] Release verified.");
+                }
+            } catch (e) {
+                console.log(">>> [Preview] Release failed (ignored)", e);
             }
         }
     }
 
     function closeAllCameras() {
         console.log('>>> [Close] Closing ALL connections');
+
+        // [ANTIGRAVITY] Clear Error Messages on Reset
+        ['rec-cam-error', 'scan-cam-error'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.textContent = '';
+                el.classList.add('d-none');
+                el.classList.remove('d-block');
+            }
+        });
+        document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+
 
         stopPreview(true);
         stopScanning(true);
@@ -1207,23 +1258,58 @@
         checkReadyState();
     }
 
-    function connectRecordingCamera() {
+    async function connectRecordingCamera() {
         if (!recordingCameraUrl) {
             alert("Pilih kamera rekam terlebih dahulu!");
             return;
         }
 
-        // CRITICAL FIX: Stop preview first to clear cache and reset state
-        stopPreview();
+        // [ANTIGRAVITY] Clear Previous Errors immediately
+        const errDiv = document.getElementById('rec-cam-error');
+        if (errDiv) {
+            errDiv.textContent = '';
+            errDiv.classList.add('d-none');
+        }
+        document.getElementById('camera-select-recording').classList.remove('is-invalid');
 
-        // Small delay to ensure cleanup completes
+
+        // 1. Set Mode to RECORD (High FPS) - REMOVED to prevent premature init
+        // updateCameraUsage('record', recordingCameraUrl);
+
+        // CRITICAL FIX: Stop preview first to clear cache and reset state
+        // [ANTIGRAVITY] IMMEDIATE FEEDBACK: Show overlay BEFORE awaiting stop
+        const container = document.getElementById('camera-container');
+        if (container) {
+            let loadingOverlay = document.getElementById('rec-loading-overlay');
+            if (!loadingOverlay) {
+                loadingOverlay = document.createElement('div');
+                loadingOverlay.id = 'rec-loading-overlay';
+                loadingOverlay.className = 'position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center align-items-center';
+                loadingOverlay.style.zIndex = '200';
+                loadingOverlay.style.backgroundColor = 'rgba(0,0,0,1)';
+                container.appendChild(loadingOverlay);
+            }
+            loadingOverlay.style.display = 'flex';
+            loadingOverlay.innerHTML = `
+                <div class="spinner-border text-info mb-3" role="status"></div>
+                <h5 class="text-white">Menghubungkan...</h5>
+                <p class="text-white-50 small">Mohon tunggu sebentar</p>
+             `;
+        }
+        const btn = document.getElementById('btn-connect-rec');
+        if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
+
+        // [ANTIGRAVITY] Await the release to prevent race condition!
+        await stopPreview();
+
+        // Small delay to ensure cleanup completes (even with await, socket buffers might linger)
         setTimeout(() => {
             startPreview();
 
             // Change button to "Reload"
             const btn = document.getElementById('btn-connect-rec');
             if (btn) btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Reload';
-        }, 100);
+        }, 500); // Increased to 500ms safety
     }
 
     function handleScanningCameraChange(url) {
@@ -1238,6 +1324,7 @@
         // 2. Baru switch
         scanningCameraUrl = url;
         localStorage.setItem('last_scan_camera_url', url); // SAVE PREFERENCE
+        resetScanZoom(); // [ANTIGRAVITY] Reset zoom when changing camera
 
         // RESET STATE (Ref: User request)
         resetScanningState();
@@ -1248,25 +1335,50 @@
         checkReadyState();
     }
 
-    function connectScanningCamera() {
+    async function connectScanningCamera() {
         if (!scanningCameraUrl) {
             alert("Pilih kamera scan terlebih dahulu!");
             return;
         }
 
+        // [ANTIGRAVITY] Clear Previous Errors immediately
+        const errDiv = document.getElementById('scan-cam-error');
+        if (errDiv) {
+            errDiv.textContent = '';
+            errDiv.classList.add('d-none');
+        }
+        document.getElementById('camera-select-scanning').classList.remove('is-invalid');
+
+
         // CRITICAL FIX: Stop scanning first to clear cache
-        stopScanning();
+        // [ANTIGRAVITY] IMMEDIATE FEEDBACK
+        const backendArea = document.getElementById('backend-scan-area');
+        if (backendArea && !backendArea.classList.contains('d-none')) {
+            let loadingText = document.getElementById('scan-loading-text');
+            if (loadingText) {
+                loadingText.style.display = 'flex';
+                loadingText.innerHTML = `
+                    <div class="spinner-border text-info mb-3" role="status"></div>
+                    <span>Menghubungkan...</span>
+                `;
+            }
+        }
+        const btn = document.getElementById('btn-connect-scan');
+        if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Loading...';
+
+        await stopScanning();
 
         setTimeout(() => {
             startScanning();
 
             const btn = document.getElementById('btn-connect-scan');
             if (btn) btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Reload';
-        }, 100);
+        }, 500); // 500ms safety
     }
 
     // Stop all scanning logic
-    function stopScanning(force = false) {
+    // Stop all scanning logic
+    async function stopScanning(force = false) {
         // 1. Stop Local
         isLocalScanActive = false;
         if (html5QrCode) {
@@ -1281,7 +1393,7 @@
         // Hide All Areas first
         document.getElementById('local-reader-area').classList.add('d-none');
         document.getElementById('backend-scan-area').classList.add('d-none');
-        // Do NOT unhide manual input here indiscriminately. Let setupInputMethod handle that.
+        document.getElementById('scan-zoom-container').classList.add('d-none');
 
         // Stop Backend Image feed
         const backendImg = document.getElementById('backend-scan-feed');
@@ -1298,17 +1410,23 @@
             } else {
                 console.log('>>> [Scan] Releasing backend camera:', scanningCameraUrl);
                 const data = JSON.stringify({ url: scanningCameraUrl });
-                // [ANTIGRAVITY] Use sendBeacon if forcing (unload)
-                if (force && navigator.sendBeacon) {
-                    const blob = new Blob([data], { type: 'application/json' });
-                    navigator.sendBeacon('/api/camera/release', blob);
-                } else {
-                    fetch('/api/camera/release', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        keepalive: true,
-                        body: data
-                    }).catch(e => console.log('Scan Release failed', e));
+
+                // [ANTIGRAVITY] RACE CONDITION FIX
+                try {
+                    if (force && navigator.sendBeacon) {
+                        const blob = new Blob([data], { type: 'application/json' });
+                        navigator.sendBeacon('/api/camera/release', blob);
+                    } else {
+                        await fetch('/api/camera/release', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: data,
+                            keepalive: true
+                        });
+                        console.log(">>> [Scan] Release verified.");
+                    }
+                } catch (e) {
+                    console.log(">>> [Scan] Release failed (ignored)", e);
                 }
             }
         }
@@ -1317,6 +1435,21 @@
         if (barcodeLoopInterval) {
             clearTimeout(barcodeLoopInterval);
             barcodeLoopInterval = null;
+        }
+
+        // [ANTIGRAVITY] Reset recording camera to preview mode (if using dual-camera setup)
+        // CRITICAL: Only if recording camera is ALREADY CONNECTED (prevent auto-connect)
+        if (recordingCameraUrl && scanningCameraUrl && recordingCameraUrl !== scanningCameraUrl) {
+            const recImg = document.getElementById('camera-feed');
+            const isRecCameraConnected = recImg && !recImg.classList.contains('d-none') &&
+                recImg.style.display !== 'none' && recImg.getAttribute('src');
+
+            if (isRecCameraConnected) {
+                console.log('>>> [Scan] Resetting recording camera to preview mode');
+                updateCameraUsage('preview', recordingCameraUrl);
+            } else {
+                console.log('>>> [Scan] Skipping mode reset: Recording camera not connected');
+            }
         }
 
         checkReadyState(); // Update status on stop
@@ -1395,6 +1528,8 @@
             // Show Backend Feed
             const backendArea = document.getElementById('backend-scan-area');
             backendArea.classList.remove('d-none');
+            // Show zoom controls
+            document.getElementById('scan-zoom-container').classList.remove('d-none');
             // Ensure container has relative styling for absolute positioning of loader if needed, 
             // and min-height to prevent zero-height collapse
             backendArea.style.position = 'relative';
@@ -1462,7 +1597,7 @@
                     if (indicator) indicator.innerHTML = '<span class="text-primary">Silakan scan resi...</span>';
                     updateStatus(`Platform ${selectedPlatform} aktif. Silakan scan resi.`);
                     if (scanningCameraUrl && scanningCameraUrl !== 'local_client_device') {
-                        updateCameraUsage('scan');
+                        updateCameraUsage('scan', scanningCameraUrl);
                     }
                 }
             };
@@ -1571,6 +1706,97 @@
     // Global connection state
     let isConnecting = false;
 
+    // [ANTIGRAVITY] Scope Fix: Global Helper
+    function showDisconnectUI() {
+        isConnecting = false; // RELEASE LOCK
+
+        // Find overlay dynamically
+        const loadingOverlay = document.getElementById('rec-loading-overlay');
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'none';
+            loadingOverlay.style.setProperty('display', 'none', 'important');
+            loadingOverlay.remove(); // BRUTAL REMOVAL to prevent "stuck" UI
+        }
+
+        const indicator = document.getElementById('camera-status-indicator');
+        const img = document.getElementById('camera-feed');
+        const placeholder = document.getElementById('camera-placeholder');
+
+        // Update status
+        if (indicator) indicator.innerHTML = '<span class="text-danger">⚠️ Koneksi Gagal</span>';
+
+        // LOCKDOWN: Clear platform
+        selectedPlatform = '';
+        const platformInput = document.getElementById('selected-platform');
+        if (platformInput) platformInput.value = '';
+
+        // Reset buttons UI
+        document.querySelectorAll('.platform-btn').forEach(b => {
+            b.classList.remove('active', 'btn-success', 'btn-secondary');
+            b.classList.add('btn-outline-secondary');
+        });
+
+        // Update Reset Button Visibility
+        if (typeof updateResetButtonVisibility === 'function') updateResetButtonVisibility();
+
+        // Hide image
+        if (img) {
+            img.style.display = 'none';
+            img.classList.add('d-none');
+            img.removeAttribute('src');
+        }
+
+        if (typeof updateStatus === 'function') updateStatus('Kamera terputus. Silakan hubungkan ulang.');
+        if (typeof checkReadyState === 'function') checkReadyState();
+
+        // Show placeholder with retry
+        if (placeholder) {
+            placeholder.classList.remove('d-none');
+            placeholder.classList.add('d-flex');
+            placeholder.style.display = 'flex';
+            placeholder.innerHTML = `
+                <i class="fs-1 mb-3 text-danger">⚠️</i>
+                <h4 class="text-danger">Koneksi Terputus</h4>
+                <p>Kamera tidak merespon atau koneksi hilang.</p>
+                <div class="d-flex flex-column gap-2 mt-2">
+                    <button class="btn btn-primary" onclick="startPreview()">🔄 Hubungkan Ulang</button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="closeAllCameras()">❌ Tutup Semua</button>
+                </div>
+            `;
+        }
+    }
+
+    // [ANTIGRAVITY] Scanner Disconnect UI Helper
+    function showScannerDisconnectUI() {
+        const loader = document.getElementById('scan-loading-text');
+        if (loader) {
+            loader.innerHTML = `
+                <i class="fs-1 mb-3 text-danger">⚠️</i>
+                <h5 class="text-danger">Koneksi Putus</h5>
+                <p class="text-light">Kamera scan tidak merespon/mati</p>
+                <button class="btn btn-primary mt-2" onclick="connectScanningCamera()">🔄 Coba Lagi</button>
+            `;
+            loader.style.display = 'flex';
+            loader.style.setProperty('display', 'flex', 'important');
+        }
+
+        const errDiv = document.getElementById('scan-cam-error');
+        if (errDiv) {
+            errDiv.innerHTML = '<small class="text-danger fw-bold"><i class="bi bi-exclamation-circle me-1"></i> Koneksi Terputus.</small>';
+            errDiv.classList.remove('d-none');
+            errDiv.classList.add('d-block');
+        }
+
+        const img = document.getElementById('backend-scan-feed');
+        if (img) {
+            img.style.display = 'none';
+            img.classList.add('d-none');
+            img.removeAttribute('src');
+        }
+        document.getElementById('camera-select-scanning').classList.add('is-invalid');
+        document.getElementById('btn-connect-scan').innerHTML = '<i class="bi bi-arrow-clockwise"></i> Reload';
+    }
+
     // 2. Camera Preview (Persistent Stream)
     // NOTE: This now only handles RECORDING camera preview
     function startPreview() {
@@ -1579,6 +1805,7 @@
         selectedCameraUrl = recordingCameraUrl; // Sync for compatibility
 
         console.log('>>> [Preview] Starting preview for:', recordingCameraUrl);
+        console.trace(">>> [Preview] Caller Trace"); // Debug Trace
 
         // Clear any existing timeout
         if (healthCheckInterval) clearInterval(healthCheckInterval);
@@ -1665,68 +1892,7 @@
 
 
         // Setup stream monitoring
-        // Helper to show disconnect UI
-        const showDisconnectUI = () => {
-            isConnecting = false; // RELEASE LOCK (to allow retry or other actions)
-            if (loadingOverlay) loadingOverlay.style.display = 'none';
 
-
-            const indicator = document.getElementById('camera-status-indicator');
-            const img = document.getElementById('camera-feed');
-            const placeholder = document.getElementById('camera-placeholder');
-
-            // Explicitly HIDE overlay if it exists
-            const overlay = document.getElementById('rec-loading-overlay');
-            if (overlay) {
-                overlay.style.display = 'none';
-                overlay.style.setProperty('display', 'none', 'important');
-            }
-
-            // Update status
-            // indicator.innerHTML = '<span class="text-danger">🔴 Kamera Terputus</span>';
-            indicator.innerHTML = '<span class="text-danger">⚠️ Koneksi Gagal</span>';
-
-            // LOCKDOWN: Clear platform
-            selectedPlatform = '';
-            const platformInput = document.getElementById('selected-platform');
-            if (platformInput) platformInput.value = '';
-
-            // Reset buttons UI
-            document.querySelectorAll('.platform-btn').forEach(b => {
-                b.classList.remove('active', 'btn-success', 'btn-secondary'); // comprehensive clear
-                b.classList.add('btn-outline-secondary');
-            });
-
-            // Update Reset Button Visibility
-            updateResetButtonVisibility();
-
-            // Hide image
-            if (img) {
-                img.style.display = 'none';
-                img.classList.add('d-none');
-                img.removeAttribute('src'); // Stop browser from trying to load
-            }
-
-
-
-            updateStatus('Kamera terputus. Silakan hubungkan ulang.');
-
-            checkReadyState(); // Update Ready Text (will clear 'Siap merekam')
-
-            // Show placeholder with retry
-            placeholder.classList.remove('d-none');
-            placeholder.classList.add('d-flex');
-            placeholder.style.display = 'flex'; // Force flex display
-            placeholder.innerHTML = `
-                <i class="fs-1 mb-3 text-danger">⚠️</i>
-                <h4 class="text-danger">Koneksi Terputus</h4>
-                <p>Kamera tidak merespon atau koneksi hilang.</p>
-                <div class="d-flex flex-column gap-2 mt-2">
-                    <button class="btn btn-primary" onclick="startPreview()">🔄 Hubungkan Ulang</button>
-                    <button class="btn btn-outline-secondary btn-sm" onclick="closeAllCameras()">❌ Tutup Semua</button>
-                </div>
-            `;
-        };
 
         // Track if connection succeeded to prevent premature error display
         let connectionSucceeded = false;
@@ -1788,7 +1954,10 @@
             if (selectedPlatform) {
                 if (indicator) indicator.innerHTML = '<span class="text-primary">Silakan scan resi...</span>';
                 updateStatus(`Platform ${selectedPlatform} aktif. Silakan scan resi.`);
-                updateCameraUsage('scan');
+                // [ANTIGRAVITY] FIX: Only set scan mode for scanner camera, not recording camera
+                if (scanningCameraUrl && scanningCameraUrl !== 'local_client_device') {
+                    updateCameraUsage('scan', scanningCameraUrl);
+                }
             }
 
 
@@ -1856,6 +2025,9 @@
         // Set stream source with cache buster
         img.src = `/video_feed?url=${encodeURIComponent(recordingCameraUrl)}&t=${new Date().getTime()}`;
 
+        // Set mode to PREVIEW by default when starting camera
+        updateCameraUsage('preview', recordingCameraUrl);
+
         // START HEARTBEAT
         startHeartbeat(recordingCameraUrl);
 
@@ -1914,26 +2086,7 @@
             }
         });
 
-        // Listen for camera errors (Immediate Disconnect)
-        currentSocket.off('camera_error');
-        currentSocket.on('camera_error', (data) => {
-            console.warn(">>> [Socket] Camera Error Event:", data);
 
-            // Check Recording Camera
-            if (recordingCameraUrl && data.url === recordingCameraUrl) {
-                console.log(">>> [Socket] Triggering disconnect for Recording Camera");
-                isConnecting = false; // Stop spinner
-                showDisconnectUI();
-
-                const indicator = document.getElementById('camera-status-indicator');
-                if (indicator) indicator.innerHTML = '<span class="text-danger">⚠️ Koneksi Terputus (Server Error).</span>';
-            }
-            // Check Scanning Camera? (Optional, maybe just log for now)
-            if (scanningCameraUrl && data.url === scanningCameraUrl) {
-                console.log(">>> [Socket] Triggering disconnect for Scanner Camera");
-                // Handle scanner disconnect if needed (not implementing full UI for scanner yet, just status)
-            }
-        });
 
         // Listen for ping test
         currentSocket.off('pong_test');
@@ -2048,12 +2201,16 @@
         if (!btn) return;
 
         const inputMethod = document.querySelector('input[name="input-method"]:checked')?.value;
-        const img = document.getElementById('camera-feed');
-        // Check if camera image is visible (meaning connected)
-        const isCameraActive = img && !img.classList.contains('d-none') && (img.style.display !== 'none');
+        const recImg = document.getElementById('camera-feed');
+        const scanImg = document.getElementById('backend-scan-feed');
 
-        // Only show if Input Method is Camera AND Camera is Active AND Platform is Selected
-        if (inputMethod === 'camera' && isCameraActive && selectedPlatform) {
+        // Check if ANY camera is connected (recording OR scanning)
+        const isRecCameraActive = recImg && !recImg.classList.contains('d-none') && (recImg.style.display !== 'none') && recImg.getAttribute('src');
+        const isScanCameraActive = scanImg && !scanImg.classList.contains('d-none') && (scanImg.style.display !== 'none') && scanImg.getAttribute('src');
+        const anyCameraActive = isRecCameraActive || isScanCameraActive;
+
+        // [ANTIGRAVITY] Show if ANY camera is connected (not just when platform selected)
+        if (inputMethod === 'camera' && anyCameraActive) {
             btn.classList.remove('d-none');
         } else {
             btn.classList.add('d-none');
@@ -2101,7 +2258,9 @@
         updateStatus('Scanning dihentikan.');
 
         // Update usage back to preview (kamera hanya preview, tidak scan)
-        updateCameraUsage('preview');
+        // [ANTIGRAVITY] REMOVED: This causes unintended auto-connect of recording camera!
+        // updateCameraUsage('preview');
+
 
         // 5. Update Visibility (will hide the button)
         updateResetButtonVisibility();
@@ -2123,24 +2282,37 @@
                 }
 
                 // 1. VALIDASI: Pastikan kamera connect sebelum pilih platform
-                // Gunakan checkReadyState untuk validasi ketat
-                const isReady = checkReadyState(true); // pass true to get boolean only? No, we check the global state or re-verify.
-                // Let's manually verify requirements here for the specific error message
-
                 const inputMethod = document.querySelector('input[name="input-method"]:checked').value;
-                const recActive = recordingCameraUrl && document.getElementById('camera-feed').src && !document.getElementById('camera-feed').classList.contains('d-none');
 
-                // For scanning, if mode is camera, we need it.
-                // NOTE: Local camera might not have a 'src' on backend-scan-feed, but uses html5-qrcode
+                // [ANTIGRAVITY] Merged Mode Calculation
+                const scanVal = document.getElementById('camera-select-scanning')?.value;
+                const recVal = document.getElementById('camera-select-recording')?.value;
+                const isLocal = (scanVal === 'local_client_device');
+                const isSame = (inputMethod === 'camera' && scanVal && recVal && scanVal === recVal && !isLocal);
+
+                // A. Calc Scan Active FIRST
                 let scanActive = false;
                 if (inputMethod === 'camera') {
                     if (scanningCameraUrl === 'local_client_device') {
                         scanActive = html5QrCode && html5QrCode.isScanning;
                     } else if (scanningCameraUrl) {
-                        scanActive = document.getElementById('backend-scan-feed').src && !document.getElementById('backend-scan-area').classList.contains('d-none');
+                        const scanArea = document.getElementById('backend-scan-area');
+                        const scanImg = document.getElementById('backend-scan-feed');
+                        scanActive = scanImg && scanImg.src && scanArea && !scanArea.classList.contains('d-none');
                     }
                 } else {
-                    scanActive = true; // Ignore scan camera in manual/scanner mode
+                    scanActive = true; // Manual mode assumes scanner ready
+                }
+
+                // B. Calc Rec Active (Aware of Merged Mode)
+                let recActive = false;
+                if (isSame) {
+                    // Merged: Trust Scanner Status
+                    recActive = scanActive;
+                } else {
+                    // Split: Check Recording Feed explicitly
+                    const recImg = document.getElementById('camera-feed');
+                    recActive = recordingCameraUrl && recImg && recImg.src && !recImg.classList.contains('d-none');
                 }
 
                 if (!recActive) {
@@ -2193,8 +2365,9 @@
                 checkReadyState(); // Update "Siap Merekam" text
 
                 // Mark usage as scan (baik deteksi kamera maupun metode input resi manual)
-                if (selectedCameraUrl) {
-                    updateCameraUsage('scan');
+                // [ANTIGRAVITY] FIX: Only set scan mode for scanner camera, not recording camera
+                if (scanningCameraUrl && scanningCameraUrl !== 'local_client_device') {
+                    updateCameraUsage('scan', scanningCameraUrl);
                 }
 
                 // FORCE LOOP RESTART
@@ -2369,7 +2542,7 @@
                 }
 
                 // Prominent alert for emphasis
-                Swal.fire({
+                showSafeDialog({
                     icon: 'error',
                     title: 'RESI TIDAK COCOK!',
                     background: '#0a0a12',
@@ -2378,8 +2551,12 @@
                         <div class="text-start">
                             <p>Anda sedang merekam resi: <br><strong>${currentResi}</strong></p>
                             <p>Tapi yang baru saja di-scan: <br><strong class="text-danger">${resi}</strong></p>
-                            <hr>
-                            <p class="mb-0 small text-muted">Silakan scan ulang resi <strong>${currentResi}</strong> untuk menghentikan rekaman ini, atau klik tombol "Stop & Simpan".</p>
+                            <div class="alert alert-dark border border-secondary p-2 mt-2">
+                                <small class="text-warning">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Tips: Scan ulang resi <strong>${currentResi}</strong> untuk stop otomatis.
+                                </small>
+                            </div>
                         </div>
                     `,
                     confirmButtonText: 'Saya Mengerti',
@@ -2393,7 +2570,7 @@
         if (!selectedPlatform) {
             playSound('error');
             speakText('rekaman_gagal'); // Platform not selected
-            Swal.fire({
+            showSafeDialog({
                 icon: 'warning',
                 title: 'Platform Belum Dipilih',
                 text: 'Harap pilih platform terlebih dahulu sebelum melakukan scanning!',
@@ -2408,7 +2585,7 @@
             playSound('error');
             speakText('rekaman_gagal'); // Camera not connected
 
-            Swal.fire({
+            showSafeDialog({
                 icon: 'warning',
                 title: 'Kamera Belum Dipilih',
                 text: 'Harap hubungkan kamera yang aktif terlebih dahulu!',
@@ -2428,6 +2605,10 @@
 
     function startRecording(resi, platform) {
         updateStatus('⏳ Memulai rekaman...');
+
+        // Force RECORD mode (High FPS)
+        // [ANTIGRAVITY] FIX: Explicitly specify recording camera URL
+        updateCameraUsage('record', recordingCameraUrl);
 
         fetch('/api/recording/start', {
             method: 'POST',
@@ -2458,6 +2639,17 @@
                     document.getElementById('btn-cancel').classList.remove('d-none');
 
                     document.getElementById('recording-timer').classList.remove('d-none');
+
+                    // [ANTIGRAVITY] Show Scanner Timer
+                    const scanTimer = document.getElementById('scan-recording-timer');
+                    if (scanTimer) scanTimer.classList.remove('d-none');
+
+                    // [ANTIGRAVITY] Show Scan Buttons
+                    const scanFooter = document.getElementById('scan-card-footer');
+                    if (scanFooter) {
+                        scanFooter.classList.remove('d-none');
+                        scanFooter.classList.add('d-block'); // Ensure block display
+                    }
 
                     // Start Timer
                     startTimer();
@@ -2499,7 +2691,10 @@
             .catch(err => {
                 playSound('error');
                 speakText('rekaman_gagal');
-                alert('Error: ' + err);
+                if (err) {
+                    alert('Error: ' + err);
+
+                }
             });
     }
 
@@ -2519,9 +2714,16 @@
         }
 
         updateStatus('💾 Menyimpan rekaman...');
+
+        // [ANTIGRAVITY] Non-blocking "Saving" Toast
         Toast.fire({
-            title: '🔃 Menyimpan Rekaman',
+            icon: 'info',
+            title: '💾 Menyimpan...',
+            text: 'Mohon tunggu sebentar...',
+            timer: 0, // Persistent until replaced
+            showConfirmButton: false
         });
+
 
 
         // Voice notification
@@ -2534,7 +2736,9 @@
         })
             .then(res => res.json())
             .then(data => {
+                console.log('>>> [Stop] Response received:', data);
                 if (data.success) {
+                    console.log('>>> [Stop] Success = true, starting UI update');
                     try {
                         // Success Feedback FIRST
                         updateStatus('✅ Rekaman disimpan!');
@@ -2574,9 +2778,11 @@
                         };
 
                         // CRITICAL: Reset recording state
+                        console.log('>>> [Stop] Resetting recording state');
                         isRecording = false;
                         recordingId = null;
 
+                        console.log('>>> [Stop] Calling resetUI()');
                         resetUI();
 
                         // Show last record info
@@ -2612,7 +2818,9 @@
                     // Voice notification for save error
                     speakText('rekaman_gagal');
 
-                    alert('Gagal stop: ' + data.error);
+                    if (data.error) {
+                        alert('Gagal stop: ' + data.error);
+                    }
                 }
             })
             .catch(err => {
@@ -2623,6 +2831,8 @@
 
     // Reset UI helper
     function resetUI() {
+        console.log('>>> [ResetUI] Function called');
+
         // Hide recording overlay
         const recOverlay = document.getElementById('recording-overlay');
         if (recOverlay) {
@@ -2634,11 +2844,30 @@
         document.getElementById('btn-stop')?.classList.add('d-none');
         document.getElementById('btn-cancel')?.classList.add('d-none');
         document.getElementById('recording-timer')?.classList.add('d-none');
+        document.getElementById('scan-recording-timer')?.classList.add('d-none');
+
+        // [ANTIGRAVITY] Hide Scan Buttons
+        const scanFooter = document.getElementById('scan-card-footer');
+        if (scanFooter) {
+            scanFooter.classList.add('d-none');
+            scanFooter.classList.remove('d-block');
+        }
 
         // Stop timer
         if (timerInterval) {
             clearInterval(timerInterval);
             timerInterval = null;
+        }
+
+        // Restore PREVIEW mode (Low FPS)
+        // [ANTIGRAVITY] FIX: Explicitly specify recording camera URL with fallback
+        const recCamUrl = recordingCameraUrl || document.getElementById('camera-select-recording')?.value;
+        console.log('>>> [ResetUI] Resetting camera mode to preview. URL:', recCamUrl);
+
+        if (recCamUrl) {
+            updateCameraUsage('preview', recCamUrl);
+        } else {
+            console.warn('>>> [ResetUI] No recording camera URL found, skipping mode reset');
         }
     }
 
@@ -2646,61 +2875,127 @@
         console.log(">>> [UI] Cancel button clicked. ID:", recordingId);
         if (!recordingId) return;
 
-        if (!confirm('Yakin ingin membatalkan rekaman ini? File tidak akan disimpan.')) return;
-
-        fetch('/api/recording/cancel', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ recording_id: recordingId })
-        })
-            .then(res => res.json())
-            .then(data => {
-                // CRITICAL: Reset recording state
-                isRecording = false;
-                recordingId = null;
-                currentResi = null;
-
-                resetUI();
-                updateStatus('❌ Rekaman dibatalkan');
-
-                // Show cancel toast notification
-                Toast.fire({
-                    icon: 'warning',
-                    title: '🗑️ Rekaman Dibatalkan',
-                    text: 'Video tidak disimpan'
+        Swal.fire({
+            title: 'Batalkan Rekaman?',
+            text: "Video TIDAK akan disimpan. Yakin ingin membatalkan?",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Ya, Batalkan!',
+            cancelButtonText: 'Tidak'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Show loading
+                Swal.fire({
+                    title: 'Membatalkan...',
+                    allowOutsideClick: false,
+                    showConfirmButton: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
                 });
 
-                // Voice notification
-                speakText('rekaman_gagal'); // No specific 'cancelled' audio, use 'gagal'
+                fetch('/api/recording/cancel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ recording_id: recordingId })
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        // CRITICAL: Reset recording state
+                        isRecording = false;
+                        recordingId = null;
+                        currentResi = null;
 
-                // Restore scanner if needed
-                if (document.querySelector('input[name="input-method"]:checked').value === 'scanner') {
-                    document.getElementById('resi-input').focus();
-                }
-            })
-            .catch(err => {
-                console.error(">>> [UI] Cancel fetch error:", err);
-                alert("Gagal membatalkan: " + err.message);
-            });
+                        resetUI();
+                        updateStatus('❌ Rekaman dibatalkan');
+
+                        // Show cancel toast notification
+                        Toast.fire({
+                            icon: 'warning',
+                            title: '🗑️ Rekaman Dibatalkan',
+                            text: 'Video tidak disimpan'
+                        });
+
+                        // Voice notification
+                        speakText('rekaman_gagal'); // No specific 'cancelled' audio, use 'gagal'
+
+                        // Restore scanner if needed
+                        if (document.querySelector('input[name="input-method"]:checked').value === 'scanner') {
+                            document.getElementById('resi-input').focus();
+                        }
+                    })
+                    .catch(err => {
+                        console.error(">>> [UI] Cancel fetch error:", err);
+                        Swal.fire('Gagal', "Gagal membatalkan: " + err.message, 'error');
+                    });
+            } // End if confirmed
+        }); // End then
     }
 
     function redoRecording() {
-        if (!lastRecordId) return;
-        if (!confirm('PERINGATAN: Rekaman sebelumnya akan DIHAPUS dan Anda akan merekam ulang resi yang sama. Lanjutkan?')) return;
+        console.log(">>> [Redo] Button Clicked. Last ID:", lastRecordId);
 
-        // Delete previous
-        fetch('/api/recording/cancel', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ recording_id: lastRecordId })
-        })
-            .then(res => res.json())
-            .then(() => {
-                document.getElementById('last-recording-card').style.display = 'none';
-                lastRecordId = null;
-                updateStatus('♻️ Siap rekam ulang. Silakan scan/input resi lagi.');
-                document.getElementById('resi-input').focus();
-            });
+        if (!lastRecordId) {
+            console.error(">>> [Redo] No lastRecordId found!");
+            Swal.fire('Error', 'Tidak ada data rekaman terakhir untuk di-undo.', 'error');
+            return;
+        }
+
+        // Confirm first
+        Swal.fire({
+            title: 'Rekam Ulang?',
+            text: "Rekaman sebelumnya akan DIHAPUS dan Anda akan merekam ulang resi yang sama.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Ya, Rekam Ulang',
+            cancelButtonText: 'Batal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                console.log(">>> [Redo] Confirmed. Sending cancel request...");
+
+                // Show loading
+                const btn = document.querySelector('button[onclick="redoRecording()"]');
+                const originalText = btn ? btn.innerHTML : 'Redo';
+                if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Hapus...';
+
+                // Delete previous
+                fetch('/api/recording/cancel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ recording_id: lastRecordId })
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        console.log(">>> [Redo] Cancel response:", data);
+
+                        document.getElementById('last-recording-card').style.display = 'none';
+                        lastRecordId = null; // Clear it to prevent double-redo
+
+                        // Reset UI feedback
+                        if (btn) btn.innerHTML = originalText;
+
+                        updateStatus('♻️ Siap rekam ulang. Silakan scan/input resi lagi.');
+
+                        // Focus input if in scanner mode
+                        const resiInput = document.getElementById('resi-input');
+                        if (resiInput) resiInput.focus();
+
+                        Toast.fire({
+                            icon: 'info',
+                            title: '♻️ Siap Rekam Ulang'
+                        });
+                    })
+                    .catch(err => {
+                        console.error(">>> [Redo] Error:", err);
+                        if (btn) btn.innerHTML = originalText;
+                        Swal.fire('Gagal', 'Terjadi kesalahan saat menghapus rekaman lama: ' + err.message, 'error');
+                    });
+            }
+        });
     }
 
     // Utils
@@ -2714,6 +3009,10 @@
             const sec = (diff % 60).toString().padStart(2, '0');
             timerEl.textContent = `${min}:${sec}`;
 
+            // [ANTIGRAVITY] Sync Scanner Timer
+            const scanTimer = document.getElementById('scan-recording-timer');
+            if (scanTimer) scanTimer.textContent = `${min}:${sec}`;
+
             // Color coding based on validation
             timerEl.classList.remove('text-success', 'text-warning', 'text-danger');
 
@@ -2725,28 +3024,30 @@
                 timerEl.classList.add('text-danger');
             }
 
-            // Auto check
-            if (diff >= 300) { // 5 min max
-                stopRecording(); // Auto stop/split logic could go here
-            }
+            // [ANTIGRAVITY] Auto-Stop (Configured Limit)
+            const limit = {{ max_recording_duration | default (3600)
+        }};
+    if (diff >= limit) {
+        console.log(`>>> [Timer] Auto-stopping: Duration (${diff}s) >= Limit (${limit}s)`);
+        clearInterval(timerInterval); // Stop timer immediately
+        stopRecording();
+
+        // Audible warning
+        playSound('beep');
+
+        // [ANTIGRAVITY] Max Duration Alert
+        Swal.fire({
+            icon: 'warning',
+            title: 'Batas Waktu Tercapai!',
+            text: `Rekaman otomatis dihentikan karena mencapai batas durasi ${Math.floor(limit / 60)} menit.`,
+            confirmButtonText: 'OK'
+        });
+    }
 
         }, 1000);
     }
 
-    function resetUI() {
-        isRecording = false;
-        recordingId = null;
-        clearInterval(timerInterval);
-
-        document.getElementById('recording-overlay').classList.add('d-none');
-        document.getElementById('recording-overlay').classList.remove('d-flex');
-
-        document.getElementById('btn-stop').classList.add('d-none');
-        document.getElementById('btn-cancel').classList.add('d-none');
-
-        document.getElementById('recording-timer').classList.add('d-none');
-        document.getElementById('recording-timer').textContent = '00:00';
-    }
+    // [ANTIGRAVITY] REMOVED DUPLICATE resetUI() - Using the one at line 2822 instead
 
     function updateStatus(msg) {
         document.getElementById('status-message').textContent = msg;
@@ -2781,19 +3082,14 @@
         const msgEl = document.getElementById('status-message');
         const indicator = document.getElementById('camera-status-indicator');
 
-        // 1. Cek Recording Camera
-        const recImg = document.getElementById('camera-feed');
-        // Ensure src is present AND we are not in the middle of connecting (spinning)
-        // AND Button text says "Reload" (meaning we are active)
-        const btnRec = document.getElementById('btn-connect-rec');
-        const isRecBtnActive = btnRec && btnRec.innerHTML.includes('Reload');
+        // [ANTIGRAVITY] Merged Mode Check
+        const scanVal = document.getElementById('camera-select-scanning')?.value;
+        const recVal = document.getElementById('camera-select-recording')?.value;
+        const isLocal = (scanVal === 'local_client_device');
+        const isSame = (inputMethod === 'camera' && scanVal && recVal && scanVal === recVal && !isLocal);
 
-        const recConnected = recordingCameraUrl && recImg && !recImg.classList.contains('d-none') &&
-            recImg.style.display !== 'none' && recImg.getAttribute('src') &&
-            !isConnecting && isRecBtnActive;
-
-        // 2. Cek Scanning Camera (Only if inputMethod == 'camera')
-        let scanConnected = true; // Default true for 'scanner' mode (manual)
+        // 2. Cek Scanning Camera (Prioritized order to support merger logic)
+        let scanConnected = true;
         if (inputMethod === 'camera') {
             if (scanningCameraUrl === 'local_client_device') {
                 scanConnected = isLocalScanActive;
@@ -2803,6 +3099,27 @@
             } else {
                 scanConnected = false;
             }
+        }
+
+        // 1. Cek Recording Camera
+        let recConnected = false;
+
+        if (isSame) {
+            // MERGED MODE: The Recording Stream is hidden for performance.
+            // We trust the Scanner Connection (since it's the same camera) 
+            // AND ensure the Recording Button thinks it's connected (Reload state).
+            const btnRec = document.getElementById('btn-connect-rec');
+            const isRecBtnActive = btnRec && btnRec.innerHTML.includes('Reload');
+            recConnected = scanConnected && isRecBtnActive;
+        } else {
+            // SPLIT MODE: Standard check for visible stream
+            const recImg = document.getElementById('camera-feed');
+            const btnRec = document.getElementById('btn-connect-rec');
+            const isRecBtnActive = btnRec && btnRec.innerHTML.includes('Reload');
+
+            recConnected = recordingCameraUrl && recImg && !recImg.classList.contains('d-none') &&
+                recImg.style.display !== 'none' && recImg.getAttribute('src') &&
+                !isConnecting && isRecBtnActive;
         }
 
         let headerStatus = "";
@@ -2930,5 +3247,244 @@
 
 
 </script>
+
+<script>
+    /**
+     * [ANTIGRAVITY] Dynamic Layout & Performance Logic
+     * Handles Single/Dual View toggling and Layout-aware FPS.
+     */
+
+    // 1. Dynamic Layout Manager
+    function updateCameraLayout() {
+        const scanSel = document.getElementById('camera-select-scanning');
+        const recSel = document.getElementById('camera-select-recording');
+        const scanContainer = document.getElementById('scanning-card-container');
+        const recContainer = document.getElementById('recording-card-container');
+        const recImg = document.getElementById('camera-feed');
+
+        if (!scanSel || !recSel || !scanContainer || !recContainer) return;
+
+        const scanVal = scanSel.value;
+        const recVal = recSel.value;
+        const inputMethod = document.querySelector('input[name="input-method"]:checked')?.value;
+        const isLocal = (scanVal === 'local_client_device');
+
+        // Rule: Merge if same camera AND input method is 'camera' (so scan view is active)
+        const isSame = (inputMethod === 'camera' && scanVal && recVal && scanVal === recVal && !isLocal);
+
+        if (isSame) {
+            // MERGED VIEW
+            // Hide Recording Card (Bottom)
+            recContainer.classList.add('d-none');
+
+            // [ANTIGRAVITY] ENLARGE SCANNER VIEW
+            const scanImg = document.getElementById('backend-scan-feed');
+            if (scanImg) {
+                scanImg.style.minHeight = '480px';
+                scanImg.style.objectFit = 'contain';
+                scanImg.style.width = '100%';
+                scanImg.style.backgroundColor = '#000';
+            }
+
+            // [ANTIGRAVITY] PERFORMANCE FIX: Stop the recording stream explicitly!
+            // Only if we are NOT currently connecting (allow handshake to finish)
+            // check for 'isConnecting' safety
+            const connecting = (typeof isConnecting !== 'undefined') ? isConnecting : false;
+
+            if (recImg && !connecting) {
+                // Only clear if it actually has a source to clear (avoid redundant DOM updates)
+                if (recImg.hasAttribute('src') && recImg.src !== '') {
+                    recImg.removeAttribute('src');
+                    recImg.style.display = 'none';
+                }
+            }
+
+            // Ensure visual emphasis if needed
+            scanContainer.classList.add('border-warning');
+            scanContainer.classList.remove('border-primary');
+        } else {
+            // SPLIT VIEW
+            // Show Recording Card
+            recContainer.classList.remove('d-none');
+
+            // RESET SCANNER VIEW
+            const scanImg = document.getElementById('backend-scan-feed');
+            if (scanImg) {
+                scanImg.style.minHeight = '';
+                scanImg.style.objectFit = '';
+                scanImg.style.width = '';
+                scanImg.style.backgroundColor = '';
+            }
+
+            // [ANTIGRAVITY] PERFORMANCE FIX: Restore stream if missing
+            // DISABLED: This causes infinite loops if the camera is legitimately failing/disconnected.
+            // If the user wants to reconnect, they should click the button.
+            /*
+            if (recImg && (!recImg.src || recImg.src === '' || recImg.src.includes(window.location.hash))) {
+                if (recVal) {
+                    console.log(">>> [Layout] Restoring Recording Stream...");
+                    if (typeof connectRecordingCamera === 'function') connectRecordingCamera();
+                }
+            }
+            */
+
+            scanContainer.classList.remove('border-warning');
+            scanContainer.classList.add('border-primary');
+        }
+
+        // Dynamic Overlay Relocation
+        // Move the "Recording Status" overlay to the visible container
+        const overlay = document.getElementById('recording-overlay');
+        const targetParent = isSame ? document.getElementById('scanner-container') : document.getElementById('camera-container');
+
+        if (overlay && targetParent && overlay.parentElement !== targetParent) {
+            targetParent.appendChild(overlay);
+        }
+
+        // [ANTIGRAVITY] Dynamic Last Recording Card Relocation
+        // Ensure "Last Recording" card appears immediately below the active view
+        const lastRecCard = document.getElementById('last-recording-card');
+        if (lastRecCard) {
+            const scanCard = document.getElementById('scanning-card-container');
+            const recCard = document.getElementById('recording-card-container');
+
+            if (isSame && scanCard) {
+                // Merged Mode: Move Last Rec Card to be after Scan Card
+                // (This ensures it sits tight against the scan box, skipping the hidden Rec Card)
+                scanCard.parentNode.insertBefore(lastRecCard, scanCard.nextSibling);
+            } else if (!isSame && recCard) {
+                // Split Mode: Move Last Rec Card to be after Rec Card
+                recCard.parentNode.insertBefore(lastRecCard, recCard.nextSibling);
+            }
+        }
+    }
+
+    // 2. FPS Logic Override
+    // Wrap the existing updateCameraUsage to enforce "Same Camera = Smooth" rule
+    const _originalUpdateCameraUsage = window.updateCameraUsage;
+    window.updateCameraUsage = function (purpose, specificUrl = null) {
+        const scanVal = document.getElementById('camera-select-scanning')?.value;
+        const recVal = document.getElementById('camera-select-recording')?.value;
+        const inputMethod = document.querySelector('input[name="input-method"]:checked')?.value;
+        const isLocal = (scanVal === 'local_client_device');
+        const isSame = (inputMethod === 'camera' && scanVal && recVal && scanVal === recVal && !isLocal);
+
+        const targetUrl = specificUrl || selectedCameraUrl; // selectedCameraUrl is global
+
+        // If Merged View active, prevents downgrading to 'preview' (10/15fps)
+        // because the single view handles scanning (needs 20) and recording (needs 30).
+        if (isSame && purpose === 'preview') {
+            // Check if target is indeed the shared camera
+            if (targetUrl === recVal) {
+                // Upgrade to 'scan' (20fps) as baseline for smooth experience
+                // 'record' (30fps) will still override this when recording starts
+                if (typeof _originalUpdateCameraUsage === 'function') {
+                    _originalUpdateCameraUsage('scan', targetUrl);
+                    return;
+                }
+            }
+        }
+
+        if (typeof _originalUpdateCameraUsage === 'function') {
+            _originalUpdateCameraUsage(purpose, targetUrl);
+        }
+    };
+
+    // 3. Border/Visual Feedback Observer
+    // Watches for Recording Overlay visibility to toggle border on parent
+    document.addEventListener('DOMContentLoaded', () => {
+        const overlay = document.getElementById('recording-overlay');
+        if (overlay) {
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.attributeName === 'class') {
+                        const isHidden = overlay.classList.contains('d-none');
+                        const parent = overlay.parentElement;
+                        if (parent) {
+                            if (!isHidden) {
+                                // Recording Active
+                                parent.classList.add('border', 'border-5', 'border-danger');
+                            } else {
+                                // Recording Inactive
+                                parent.classList.remove('border', 'border-5', 'border-danger');
+                            }
+                        }
+                    }
+                });
+            });
+            observer.observe(overlay, { attributes: true });
+        }
+
+        // Hook Listeners
+        const events = ['change', 'input'];
+        ['camera-select-scanning', 'camera-select-recording'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) events.forEach(e => el.addEventListener(e, updateCameraLayout));
+        });
+
+        document.querySelectorAll('input[name="input-method"]').forEach(el => {
+            el.addEventListener('change', updateCameraLayout);
+        });
+
+        // Periodic check to catch initial load
+        setInterval(updateCameraLayout, 1000);
+    });
+
+</script>
 <script src="{{ url_for('static', filename='js/modules/video_player.js') }}"></script>
+
+<script>
+    // [ANTIGRAVITY] NEW: Scanner Zoom Logic
+    function adjustScanZoom(delta) {
+        if (!scanningCameraUrl || scanningCameraUrl === 'manual') return;
+
+        let newZoom = scanningZoomLevel + delta;
+        // Clamp between 1.0 and 4.0
+        if (newZoom < 1.0) newZoom = 1.0;
+        if (newZoom > 4.0) newZoom = 4.0;
+
+        scanningZoomLevel = newZoom;
+        updateScanZoomDisplay();
+
+        console.log(`>>> [Scanner] Zooming to ${scanningZoomLevel}x on ${scanningCameraUrl}`);
+
+        fetch('/api/camera/zoom', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: scanningCameraUrl, level: scanningZoomLevel })
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) console.warn("Zoom failed:", data);
+            })
+            .catch(err => console.error("Zoom error:", err));
+    }
+
+    function resetScanZoom() {
+        scanningZoomLevel = 1.0;
+        updateScanZoomDisplay();
+
+        if (scanningCameraUrl && scanningCameraUrl !== 'manual' && !scanningCameraUrl.includes('client_device')) {
+            fetch('/api/camera/zoom', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: scanningCameraUrl, level: 1.0 })
+            }).catch(e => { });
+        }
+    }
+
+    function updateScanZoomDisplay() {
+        const indicator = document.getElementById('scan-zoom-indicator');
+        if (indicator) {
+            indicator.textContent = `Zoom: ${scanningZoomLevel.toFixed(1)}x`;
+            indicator.style.display = 'block';
+
+            // Auto hide
+            if (window.scanZoomTimeout) clearTimeout(window.scanZoomTimeout);
+            window.scanZoomTimeout = setTimeout(() => {
+                indicator.style.display = 'none';
+            }, 2000);
+        }
+    }
+</script>
 {% endblock %}

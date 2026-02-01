@@ -1,10 +1,11 @@
 {
   "rtsp_url": "http://192.168.43.1:4747/mjpegfeed",
+  "app_version": "1.0.0",
   "rtsp_transport": "tcp",
   "camera_timeout": 10,
   "recordings_folder": "recordings",
   "database_file": "packing_records.db",
-  "max_recording_duration": 1800,
+  "max_recording_duration": 300,
   "ffmpeg_path": "ffmpeg",
   "use_ffmpeg": true,
   "resi_prefix": "JX",
@@ -40,7 +41,7 @@
     {
       "id": 1,
       "name": "Kamera A",
-      "url": "rtsp://admin:Asdfz12345@192.168.1.101:554/Streaming/Channels/102",
+      "url": "rtsp://admin:Ayzara2026@192.168.1.101:554/Streaming/Channels/102",
       "enabled": true
     },
     {
@@ -58,7 +59,25 @@
     {
       "id": 4,
       "name": "Kamera A+",
-      "url": "rtsp://admin:Asdfz12345@192.168.1.101:554/Streaming/Channels/101",
+      "url": "rtsp://admin:Ayzara2026@192.168.1.101:554/Streaming/Channels/101",
+      "enabled": true
+    },
+    {
+      "id": 5,
+      "name": "DroidCam (192.168.43.1)",
+      "url": "http://192.168.43.1:4747/mjpegfeed",
+      "enabled": true
+    },
+    {
+      "id": 6,
+      "name": "Local Camera 1",
+      "url": "1",
+      "enabled": true
+    },
+    {
+      "id": 7,
+      "name": "ONVIF Camera (192.168.43.39)",
+      "url": "http://admin:admin@192.168.43.39:8080/video",
       "enabled": true
     }
   ],

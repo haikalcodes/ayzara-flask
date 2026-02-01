@@ -14,6 +14,9 @@ from app.services.camera_service import (
     status_cache_lock
 )
 import config
+import gevent
+from gevent.threadpool import ThreadPool
+_camera_test_pool = ThreadPool(5)
 
 camera_bp = Blueprint('camera', __name__)
 
@@ -238,36 +241,42 @@ def camera_feed(camera_url):
 @login_required
 def video_feed():
     """Legacy video feed endpoint (for compatibility)"""
-    url = request.args.get('url')
-    processing_mode = request.args.get('type')
-    
-    if not url:
-        return "URL parameter required", 400
-        
-    # Mark usage for preview/monitoring
-    from flask_login import current_user
-    from app.services.camera_service import mark_camera_in_use
-    from flask import stream_with_context
-    
     try:
-        username = current_user.username if current_user.is_authenticated else 'Unknown'
-    except Exception:
-        username = 'Unknown'
-    
-    # Update usage purpose if type is scan (auto-mark)
-    purpose = 'scan' if processing_mode == 'scan' else 'preview'
-    mark_camera_in_use(url, username, purpose)
-
-    camera = get_camera_stream(url)
-    
-    if not camera:
-        # Return proper HTTP error to trigger img.onerror in browser
-        from flask import abort
-        print(f"[video_feed] Camera {url} failed to initialize, returning 503")
-        abort(503)  # Service Unavailable - triggers onerror
+        url = request.args.get('url')
+        processing_mode = request.args.get('type')
         
-    return Response(stream_with_context(gen_frames(camera, processing_mode=processing_mode)),
-                    mimetype='multipart/x-mixed-replace; boundary=frame')
+        if not url:
+            return "URL parameter required", 400
+            
+        # Mark usage for preview/monitoring
+        from flask_login import current_user
+        from app.services.camera_service import mark_camera_in_use
+        from flask import stream_with_context
+        
+        try:
+            username = current_user.username if current_user.is_authenticated else 'Unknown'
+        except Exception:
+            username = 'Unknown'
+        
+        # Update usage purpose if type is scan (auto-mark)
+        purpose = 'scan' if processing_mode == 'scan' else 'preview'
+        mark_camera_in_use(url, username, purpose)
+
+        camera = get_camera_stream(url)
+        
+        if not camera:
+            # Return proper HTTP error to trigger img.onerror in browser
+            from flask import abort
+            print(f"[video_feed] Camera {url} failed to initialize, returning 503")
+            abort(503)  # Service Unavailable - triggers onerror
+            
+        return Response(stream_with_context(gen_frames(camera, processing_mode=processing_mode)),
+                        mimetype='multipart/x-mixed-replace; boundary=frame')
+    except Exception as e:
+        print(f"[video_feed] CRITICAL ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return "Internal Server Error", 500
 
 
 @camera_bp.route('/api/camera/release', methods=['POST'])
@@ -349,7 +358,9 @@ def api_camera_capture():
     import time
     
     # Compress to jpg
-    ret, buffer = cv2.imencode('.jpg', frame)
+    # ret, buffer = cv2.imencode('.jpg', frame)
+    from app.services.camera_service import run_cv
+    ret, buffer = run_cv(cv2.imencode, '.jpg', frame)
     if not ret:
         return jsonify({'success': False, 'error': 'Failed to encode image'})
         
@@ -440,6 +451,30 @@ def api_camera_heartbeat():
     except Exception as e:
         print(f"[Heartbeat] Error: {e}")
         return jsonify({'success': False}), 500
+
+
+@camera_bp.route('/api/camera/mode', methods=['POST'])
+@login_required
+def api_camera_mode():
+    """Set camera usage mode for performance optimization"""
+    data = request.get_json()
+    camera_url = data.get('url')
+    mode = data.get('mode', 'preview')  # preview, scan, record
+    
+    if not camera_url:
+        return jsonify({'success': False, 'error': 'No camera URL'}), 400
+    
+    # Get camera instance
+    camera = get_camera_stream(camera_url)
+    if camera:
+        camera.set_usage_mode(mode)
+        return jsonify({
+            'success': True,
+            'mode': mode,
+            'target_fps': camera.target_fps
+        })
+    else:
+        return jsonify({'success': False, 'error': 'Camera not found'}), 404
 
 
 # ============================================
@@ -654,35 +689,36 @@ def api_cameras_test():
                     success = False
                     for backend in backends:
                         try:
-                            cap = cv2.VideoCapture(v_src, backend)
+                            # cap = cv2.VideoCapture(v_src, backend)
+                            # [ANTIGRAVITY] OFFLOAD INIT
+                            cap = _camera_test_pool.apply(cv2.VideoCapture, (v_src, backend))
+                            
                             if cap and cap.isOpened():
-                                # Validate frames (same logic as VideoCamera.__init__)
-                                valid_frame_found = False
-                                prev_frame = None
+                                # [ANTIGRAVITY] Run validation loop in threadpool
+                                def _validate_cam(cap_ref):
+                                    valid = False
+                                    prev = None
+                                    for _ in range(5):
+                                        ret, f = cap_ref.read()
+                                        if ret and f is not None and f.size > 0:
+                                            h, w = f.shape[:2]
+                                            if h < 10 or w < 10: 
+                                                time.sleep(0.1)
+                                                continue
+                                            
+                                            # Simple frame check
+                                            if prev is not None:
+                                                 valid = True
+                                                 break
+                                            prev = f.copy()
+                                        time.sleep(0.1)
+                                    return valid
                                 
-                                for attempt in range(5):  # Try 5 frames
-                                    ret, frame = cap.read()
-                                    if ret and frame is not None and frame.size > 0:
-                                        h, w = frame.shape[:2]
-                                        if h < 10 or w < 10:
-                                            time.sleep(0.1)
-                                            continue
-                                        
-                                        mean_val = frame.mean()
-                                        if mean_val < 5 or mean_val > 250:
-                                            time.sleep(0.1)
-                                            continue
-                                        
-                                        if prev_frame is not None:
-                                            diff = cv2.absdiff(frame, prev_frame)
-                                            diff_mean = diff.mean()
-                                            if 0.5 < diff_mean < 100:
-                                                valid_frame_found = True
-                                                break
-                                        
-                                        prev_frame = frame.copy()
-                                    time.sleep(0.1)
-                                
+                                try:
+                                    valid_frame_found = _camera_test_pool.apply(_validate_cam, (cap,))
+                                except:
+                                    valid_frame_found = False
+
                                 if valid_frame_found:
                                     success = True
                                     cap.release()

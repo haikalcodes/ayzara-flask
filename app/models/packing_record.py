@@ -50,8 +50,13 @@ def init_packing_record_model(db):
             # Check if actual file exists
             file_exists = False
             if self.file_video:
-                import config
-                full_path = os.path.join(config.RECORDINGS_FOLDER, self.file_video)
+                # Handle both absolute and relative paths
+                if os.path.isabs(self.file_video):
+                    full_path = self.file_video
+                else:
+                    import config
+                    full_path = os.path.join(config.RECORDINGS_FOLDER, self.file_video)
+                
                 if os.path.exists(full_path):
                     file_exists = True
 

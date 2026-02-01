@@ -20,6 +20,23 @@ import platform
 import numpy as np
 from app.utils.logger import video_logger
 
+# [ANTIGRAVITY] GEVENT THREADPOOL
+# OpenCV calls are blocking C-functions that don't yield in Gevent.
+# We must run them in a real threadpool to keep the server responsive.
+import gevent
+from gevent.threadpool import ThreadPool
+from app.utils.safe_execution import safe_thread_loop
+
+_gevent_pool = ThreadPool(20) # Dedicate 20 real threads for camera I/O
+
+def run_cv(func, *args, **kwargs):
+    """
+    Helper to run blocking OpenCV functions in the threadpool.
+    Accepts specific args and kwargs.
+    """
+    return _gevent_pool.apply(func, args, kwargs)
+
+
 
 # ============================================
 # HARDWARE LOCK MANAGEMENT
@@ -61,6 +78,10 @@ class VideoCamera:
     def __init__(self, url):
         self.url = url
         self.last_frame = None
+        # [ANTIGRAVITY] DOUBLE BUFFERING
+        # self.last_jpeg: Stores the latest PRE-ENCODED Jpeg for streaming (Preview)
+        # self.last_frame: Stores the latest RAW frame for recording/barcode (Processing)
+        self.last_jpeg = None
         self.lock = threading.Lock()
         self.running = True
         self.last_access = time.time()
@@ -69,122 +90,201 @@ class VideoCamera:
         self.zoom_level = 1.0  # 1.0 = no zoom, 2.0 = 2x zoom
         self.last_heartbeat = time.time()  # Initialize heartbeat
         
+        self.zoom_level = 1.0  # 1.0 = no zoom, 2.0 = 2x zoom
+        self.last_heartbeat = time.time()  # Initialize heartbeat
+        self.start_time = time.time() # [ANTIGRAVITY] Track creation time for grace period
+        
+        # Adaptive FPS for CPU optimization
+        self.usage_mode = 'preview'  # 'preview', 'scan', 'record'
+        self.target_fps = 30  # Default to 30 FPS for responsiveness
+        
         # Determine backend
         is_local = str(url).isdigit()
         
         if is_local:
             # Try DirectShow first, fallback to MSMF
-            try:
-                self.cap = cv2.VideoCapture(int(url), cv2.CAP_DSHOW)
-                if not self.cap.isOpened():
-                    self.cap = cv2.VideoCapture(int(url), cv2.CAP_MSMF)
-            except:
-                self.cap = cv2.VideoCapture(int(url), cv2.CAP_MSMF)
+            # [ANTIGRAVITY] MOVED TO UPDATE() for Thread Affinity
+            self.cap = None 
         else:
             # IP camera
-            self.cap = cv2.VideoCapture(url)
+            self.cap = None
+
         
-        # Set properties
-        if self.cap.isOpened():
-            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            # Use HD resolution (1280x720) for better barcode detection details
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-            self.cap.set(cv2.CAP_PROP_FPS, 30)
+        # [ANTIGRAVITY] MOVED PROPERTY SETTING TO UPDATE()
+        # if self.cap.isOpened():
+        #    ...
             
-            # CRITICAL: Validate that camera produces valid frames
-            # For local cameras, isOpened() can be True but frames are garbage
-            print(f"[Camera] Validating {url}...")
-            valid_frame_found = False
-            prev_frame = None
-            
-            for attempt in range(10):  # Try 10 times over 1 second
-                ret, test_frame = self.cap.read()
-                
-                if ret and test_frame is not None and test_frame.size > 0:
-                    # Check 1: Frame has reasonable dimensions
-                    h, w = test_frame.shape[:2]
-                    if h < 10 or w < 10:
-                        print(f"[Camera] {url} frame too small: {w}x{h}")
-                        time.sleep(0.1)
-                        continue
-                    
-                    # Check 2: Frame is not completely black or white
-                    mean_val = test_frame.mean()
-                    if mean_val < 5 or mean_val > 250:
-                        print(f"[Camera] {url} frame is blank (mean={mean_val:.1f})")
-                        time.sleep(0.1)
-                        continue
-                    
-                    # Check 3: Compare with previous frame (real cameras have changes)
-                    if prev_frame is not None:
-                        # Calculate difference between frames
-                        diff = cv2.absdiff(test_frame, prev_frame)
-                        diff_mean = diff.mean()
-                        
-                        # Real camera should have SOME difference (even if static scene, there's noise/compression)
-                        # But not TOO much (pure random noise has huge differences)
-                        # Real camera should have SOME difference (even if static scene, there's noise/compression)
-                        # But not TOO much (pure random noise has huge differences)
-                        # [ANTIGRAVITY] DISABLED STRICT CHECK FOR STATIC CAMERAS
-                        # if 0.5 < diff_mean < 100:  # Sweet spot for real video
-                        valid_frame_found = True
-                        print(f"[Camera] {url} validation SUCCESS (Skipped strict diff check, diff={diff_mean:.2f})")
-                        break
-                    
-                    prev_frame = test_frame.copy()
-                
-                time.sleep(0.1)
-            
-            if not valid_frame_found:
-                video_logger.error(f"Validation FAILED - no valid frames", extra={'context': {'url': url}})
-                self.cap.release()
-                self.cap = None
-                self.running = False
-                # Emit socket error
-                try:
-                    from app import socketio
-                    if socketio:
-                        socketio.emit('camera_error', {'url': str(url), 'error': 'Camera not producing valid frames'})
-                except:
-                    pass
+        print(f"[Camera] {url} init pending (background thread)...")
         
-        # Start update thread only if cap is valid
-        if self.cap:
-            self.thread = threading.Thread(target=self.update, daemon=True)
-            self.thread.start()
+        # [ANTIGRAVITY] THREAD AFFINITY FIX
+        # Instead of a Greenlet (threading.Thread patched), we use a REAL WORKER THREAD
+        # from the threadpool to host the entire camera loop. 
+        # This ensures init and read happen in the SAME real thread.
+        self.running = True
+        
+        # [ANTIGRAVITY] STORE RESULT FOR JOINING
+        # We store the AsyncResult to allow 'joining' (waiting) later.
+        self.worker_task = _gevent_pool.apply_async(self.update)
+
     
     def __del__(self):
         self.stop()
     
     def stop(self):
         """Explicitly stop the camera stream and FORCE hardware release"""
+        print(f"[Camera] Stopping {self.url}...")
         self.running = False
-        if hasattr(self, 'thread') and self.thread.is_alive():
-            self.thread.join(timeout=2.0)
-        
-        if hasattr(self, 'cap') and self.cap is not None:
+
+        # [ANTIGRAVITY] PROPER JOINING
+        # Use the stored AsyncResult from the threadpool
+        if hasattr(self, 'worker_task') and self.worker_task:
             try:
-                self.cap.release()
-            except:
-                pass
-            self.cap = None
+                # wait() blocks until the task is ready (finished)
+                self.worker_task.wait(timeout=3.0)
+                print(f"[Camera] {self.url} Join successful.")
+            except Exception as e:
+                print(f"[Camera] {self.url} Join warning: {e}")
+
+        # Check legacy thread attribute just in case
+        if hasattr(self, 'thread') and hasattr(self.thread, 'is_alive') and self.thread.is_alive():
+            try:
+                self.thread.join(timeout=1.0)
+            except: pass
+
+        # Double check: Only release if we are SURE thread is dead/gone
+        # and cap is still there (should typically be None if thread finished)
+        if hasattr(self, 'cap') and self.cap is not None:
+             # Logic continues...
+             pass
+
+    
+    def set_usage_mode(self, mode):
+        """
+        Set camera usage mode to adjust performance
+        
+        Args:
+            mode: 'preview', 'scan', or 'record'
+        """
+        self.usage_mode = mode
+        
+        if mode == 'preview':
+            self.target_fps = 30  # High FPS for preview (Same as scan)
+        elif mode == 'scan':
+            self.target_fps = 30# Medium-High FPS for scanning (Increased for dual-camera responsiveness)
+        elif mode == 'record':
+            self.target_fps = 30  # High FPS for recording (Smooth)
+        
+        print(f"[Camera {self.url}] Mode: {mode}, Target FPS: {self.target_fps}")
     
     def update(self):
-        """Background thread to continuously read frames"""
-        # Local import to avoid circular dependency
+        """Background thread to continuously read frames (RUNS IN REAL THREAD)"""
         from app import socketio
         
-        # Rate limit error reporting
+        # [ANTIGRAVITY] Initialize Capture INSIDE the Worker Thread
+        print(f"[Camera] Initializing capture for {self.url} in worker thread...")
+        is_local = str(self.url).isdigit()
+        
+        # [ANTIGRAVITY] RETRY STRATEGY
+        # Try to connect up to 3 times to simulate "flicker/retry" behavior for stubborn webcams.
+        success_init = False
+        
+        for attempt in range(1, 4):
+            if not self.running: break
+            print(f"[Camera] {self.url} Init Attempt {attempt}/3...")
+            
+            try:
+                if is_local:
+                    # [ANTIGRAVITY] FIX: Wrapped in safe_hardware_lock to prevent "Double Open" crash
+                    with safe_hardware_lock(self.url, timeout=10.0) as acquired:
+                        if not acquired:
+                             print(f"[Camera] {self.url} Lock Timeout (Busy). Retrying...")
+                             time.sleep(1.0)
+                             continue
+                        
+                        if not self.running: return
+
+                        # Try DSHOW
+                        self.cap = cv2.VideoCapture(int(self.url), cv2.CAP_DSHOW)
+                        
+                        # If failed or not opened, try MSMF
+                        if not self.cap.isOpened():
+                             self.cap.release()
+                             self.cap = cv2.VideoCapture(int(self.url), cv2.CAP_MSMF)
+                else:
+                    self.cap = cv2.VideoCapture(self.url)
+                    
+                if self.cap and self.cap.isOpened():
+                    # Setup props
+                    self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+                    self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+                    self.cap.set(cv2.CAP_PROP_FPS, 30)
+                    
+                    # WARMUP / VALIDATION
+                    # Read a few frames to ensure stream is actually flowing
+                    # detailed validation inside lock
+                    valid_frames = 0
+                    for _ in range(10): 
+                        ret, test = self.cap.read()
+                        if ret and test is not None and test.size > 0:
+                            valid_frames += 1
+                        time.sleep(0.05)
+                        
+                    if valid_frames > 2:
+                        print(f"[Camera] {self.url} CONNECTED & STABLE (Attempt {attempt})")
+                        success_init = True
+                        break # Exit retry loop
+                    else:
+                         print(f"[Camera] {self.url} Opened but NO FRAMES (Warmup Failed). Resetting...")
+                         self.cap.release()
+                         self.cap = None
+                else:
+                    print(f"[Camera] {self.url} Failed to open.")
+                    
+            except Exception as e:
+                print(f"[Camera] {self.url} Init Error: {e}")
+            
+            # If we are here, attempt failed. Wait before retry.
+            # "Mati nyala" simulation
+            time.sleep(1.0)
+            
+        if not success_init:
+            print(f"[Camera] {self.url} FAILED all 3 attempts. Giving up.")
+            self.running = False
+            return
+
+
+        # ----------------------------------------
+        # MAIN LOOP
+        # ----------------------------------------
         last_error_emit = 0
+        last_frame_time = 0
         
         while self.running:
             if self.cap and self.cap.isOpened():
-                ret, frame = self.cap.read()
+                # FPS throttling
+                current_time = time.time()
+                frame_interval = 1.0 / self.target_fps
+                
+                if current_time - last_frame_time < frame_interval:
+                    time.sleep(0.01) # Standard sleep blocks this thread only
+                    continue
+                
+                # [ANTIGRAVITY] Direct Blocking Read (Safe in Worker Thread)
+                try:
+                    ret, frame = self.cap.read()
+                except Exception as e:
+                    print(f"[{self.url}] Read error: {e}")
+                    ret, frame = False, None
                 
                 if ret:
-                    # Apply zoom if needed
-                    # (Zoom logic omitted for brevity, keeping existing if possible or re-inserting)
+                    # [ANTIGRAVITY] SEPARATION OF CONCERNS
+                    # raw_frame: UNTOUCHED full resolution (for Recording)
+                    # display_frame: Zoomed/Cropped (for Preview/Scanner)
+                    raw_frame = frame
+                    display_frame = frame
+
+                    # Apply zoom ONLY to display_frame
                     if self.zoom_level > 1.0:
                         h, w = frame.shape[:2]
                         crop_w = int(w / self.zoom_level)
@@ -192,39 +292,94 @@ class VideoCamera:
                         x = (w - crop_w) // 2
                         y = (h - crop_h) // 2
                         cropped = frame[y:y+crop_h, x:x+crop_w]
-                        frame = cv2.resize(cropped, (w, h))
-                    
+                        try:
+                            display_frame = cv2.resize(cropped, (w, h))
+                        except Exception as e:
+                            print(f"Zoom error: {e}")
+                            display_frame = frame # Fallback
+
+                    # [ANTIGRAVITY] DECISION: PRE-ENCODE JPEG HERE (Worker Thread)
+                    encoded_jpeg = None
+                    try:
+                        # Adaptive quality/size based on usage mode (Using display_frame)
+                        if self.usage_mode == 'preview':
+                            # Preview: Downscale & Low Quality (Fastest)
+                             h, w = display_frame.shape[:2]
+                             if w > 0 and h > 0:
+                                preview_frame = cv2.resize(display_frame, (w//2, h//2))
+                                ret_enc, buf = cv2.imencode('.jpg', preview_frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
+                                if ret_enc: encoded_jpeg = buf.tobytes()
+                                
+                        elif self.usage_mode == 'scan':
+                            # Scan: Medium Resolution for visual, High FPS
+                            h, w = display_frame.shape[:2]
+                            if w > 640:
+                                scale = 640 / w
+                                new_h = int(h * scale)
+                                scan_frame = cv2.resize(display_frame, (640, new_h))
+                                ret_enc, buf = cv2.imencode('.jpg', scan_frame, [cv2.IMWRITE_JPEG_QUALITY, 50])
+                                if ret_enc: encoded_jpeg = buf.tobytes()
+                            else:
+                                ret_enc, buf = cv2.imencode('.jpg', display_frame, [cv2.IMWRITE_JPEG_QUALITY, 50])
+                                if ret_enc: encoded_jpeg = buf.tobytes()
+                        else:
+                            # Record: High Quality Preview
+                            ret_enc, buf = cv2.imencode('.jpg', display_frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                            if ret_enc: encoded_jpeg = buf.tobytes()
+                            
+                    except Exception as e:
+                        print(f"JPEG Encode Error: {e}")
+
                     with self.lock:
-                        self.last_frame = frame
+                        # CRITICAL: Store RAW FRAME for recording/barcode (Full View)
+                        self.last_frame = raw_frame
+                        # Store ZOOMED/PROCESSED JPEG for streaming (User View)
+                        if encoded_jpeg:
+                            self.last_jpeg = encoded_jpeg
                         self.last_update = time.time()
                         self.consecutive_errors = 0
+                        last_frame_time = current_time
+
                 else:
                     self.consecutive_errors += 1
-                    # If we have consecutive errors for > 1 second (approx 10 frames at 0.1s sleep)
-                    # We should notify frontend immediately
                     if self.consecutive_errors > 5 and (time.time() - last_error_emit > 5.0):
-                        print(f"[{self.url}] Critical camera error: {self.consecutive_errors} failures")
-                        try:
-                            if socketio:
-                                socketio.emit('camera_error', {'url': self.url, 'error': 'Connection lost'})
-                                last_error_emit = time.time()
-                        except Exception as e:
-                            print(f"Socket emit failed: {e}")
+                         try:
+                            if socketio: socketio.emit('camera_error', {'url': self.url, 'error': 'Connection lost'})
+                            last_error_emit = time.time()
+                         except: pass
                     
-                    # CRITICAL: Auto-shutdown if too many errors (prevent spam)
-                    if self.consecutive_errors > 50:  # ~5 seconds of continuous failure
-                        video_logger.error(f"Too many errors ({self.consecutive_errors}), shutting down camera thread", extra={'context': {'url': self.url}})
+                    if self.consecutive_errors > 50:
                         self.running = False
-                        try:
-                            if socketio:
-                                socketio.emit('camera_error', {'url': self.url, 'error': 'Camera disconnected'})
-                        except:
-                            pass
-                        break  # Exit the while loop
+                        break
                             
                     time.sleep(0.1)
             else:
                 time.sleep(0.5)
+        
+        # Cleanup
+        if self.cap:
+             # [ANTIGRAVITY] Clean Release with Hardware Lock
+            try:
+                # We should try to acquire lock for release too, strictly speaking,
+                # but typical pattern is: owning thread releases.
+                # However, to sync with the 'update' of the NEXT thread, we should hold it.
+                # But safe_hardware_lock might be held by US if we were in the 'with' block?
+                # No, we only hold it during INIT. 
+                
+                # So here we just release. The NEXT thread will wait on the lock.
+                # BUT we need to make sure we don't return until it's really gone.
+                
+                with safe_hardware_lock(self.url, timeout=5.0):
+                    self.cap.release()
+                    print(f"[Camera] {self.url} released (Worker Thread)")
+                    
+                # [ANTIGRAVITY] COOLDOWN: Give Windows Drivers time to breathe
+                time.sleep(1.0) 
+            except Exception as e: 
+                print(f"[Camera] Release error: {e}")
+            
+            self.cap = None
+
     
     def get_frame(self):
         """Get JPEG encoded frame for streaming"""
@@ -232,12 +387,19 @@ class VideoCamera:
             if self.last_frame is None:
                 return None
             
-            self.last_access = time.time()
-            ret, jpeg = cv2.imencode('.jpg', self.last_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    def get_frame(self):
+        """
+        Get JPEG encoded frame for streaming.
+        [ANTIGRAVITY] CRITICAL: Now purely retrieves the pre-encoded buffer.
+        NO resizing, NO encoding, MINIMAL locking.
+        """
+        with self.lock:
+            if self.last_jpeg is None:
+                return None
             
-            if ret:
-                return jpeg.tobytes()
-            return None
+            self.last_access = time.time()
+            return self.last_jpeg
+
     
     def get_raw_frame(self):
         """Get raw CV2 frame for processing (barcode detection)"""
@@ -246,6 +408,42 @@ class VideoCamera:
                 return None
             self.last_access = time.time()
             return self.last_frame.copy()
+
+    def get_scan_frame(self):
+        """
+        Get frame for scanning, applying Zoom/Crop if active.
+        [ANTIGRAVITY] Fix: Ensure what is seen (Zoom) is what is scanned.
+        """
+        with self.lock:
+            if self.last_frame is None:
+                return None
+            
+            frame = self.last_frame.copy()
+            self.last_access = time.time()
+            
+            # Apply Zoom if needed
+            if self.zoom_level > 1.0:
+                try:
+                    h, w = frame.shape[:2]
+                    center_x, center_y = w // 2, h // 2
+                    radius_x, radius_y = int(w / (2 * self.zoom_level)), int(h / (2 * self.zoom_level))
+                    
+                    min_x, max_x = center_x - radius_x, center_x + radius_x
+                    min_y, max_y = center_y - radius_y, center_y + radius_y
+                    
+                    # Ensure within bounds
+                    min_x = max(0, min_x)
+                    min_y = max(0, min_y)
+                    max_x = min(w, max_x)
+                    max_y = min(h, max_y)
+                    
+                    cropped = frame[min_y:max_y, min_x:max_x]
+                    return cropped # Return cropped (zoomed into ROI)
+                except Exception as e:
+                    print(f"Zoom crop error: {e}")
+                    return frame
+            
+            return frame
 
     def update_heartbeat(self):
         """Update the heartbeat timestamp"""
@@ -268,7 +466,11 @@ def get_camera_stream(url):
             cam = active_cameras[url]
             # Check if camera is still healthy
             # Also check if cap is None (validation failed)
-            if cam.cap is None or not cam.running or (time.time() - cam.last_update >= 5.0):
+            # [ANTIGRAVITY] FIX: Grace period for async init!
+            # If camera is created < 5s ago, it is allowed to have cap=None (still initing)
+            is_starting_up = (time.time() - cam.start_time) < 5.0
+            
+            if not is_starting_up and (cam.cap is None or not cam.running or (time.time() - cam.last_update >= 5.0)):
                 # Camera is dead or invalid, remove it
                 print(f"[Camera] Removing dead/invalid camera {url} from active_cameras")
                 cam.stop()
@@ -281,17 +483,20 @@ def get_camera_stream(url):
             cam = VideoCamera(url)
             
             # CRITICAL: Check if camera is actually valid
+            # [ANTIGRAVITY] RELAXED: Init is async now, so cap is ALWAYS None at first.
+            # We return the camera object optimistically.
             # If validation failed in __init__, cap will be None
-            if cam.cap is None:
-                print(f"[Camera] {url} failed validation, not adding to active cameras")
-                return None
+            # if cam.cap is None:
+            #     print(f"[Camera] {url} failed validation, not adding to active cameras")
+            #     return None
             
             # Wait a moment for first frame
-            time.sleep(0.5)
-            if cam.last_frame is None:
-                print(f"[Camera] {url} no frames after 0.5s, rejecting")
-                cam.stop()
-                return None
+            # [ANTIGRAVITY] RELAXED: Don't reject if frames aren't ready yet (Async validation)
+            # time.sleep(0.5)
+            # if cam.last_frame is None:
+            #     print(f"[Camera] {url} no frames after 0.5s, rejecting")
+            #     cam.stop()
+            #     return None
             
             active_cameras[url] = cam
             return cam
@@ -303,43 +508,9 @@ def get_camera_stream(url):
 def gen_frames(camera, processing_mode=None):
     """Generator function for video streaming"""
     while True:
-        if processing_mode == 'scan':
-            # Get RAW frame to apply processing visualization
-            frame = camera.get_raw_frame()
-            if frame is None:
-                time.sleep(0.1)
-                continue
-                
-            try:
-                # REPLICATE BARCODE SERVICE PREPROCESSING PIPELINE
-                # 1. Grayscale
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                
-                # 2. Enhance Contrast
-                enhanced = cv2.convertScaleAbs(gray, alpha=1.5, beta=10)
-                
-                # 3. Threshold (Visualized as the "Final" stage logic)
-                # [ANTIGRAVITY] Switch to Adaptive Threshold for visualization (Better for IP Cams)
-                _, thresh = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-                
-                # Create a side-by-side or just show the adaptive one? 
-                # Let's show the ADAPTIVE one as it's the most powerful new stage
-                adaptive = cv2.adaptiveThreshold(enhanced, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                               cv2.THRESH_BINARY, 11, 2)
-                
-                # Encode the ADAPTIVE frame for better feedback
-                ret, jpeg = cv2.imencode('.jpg', adaptive, [cv2.IMWRITE_JPEG_QUALITY, 85])
-                if ret:
-                    frame_bytes = jpeg.tobytes()
-                    yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-            except Exception as e:
-                # Fallback to normal frame on error
-                print(f"Processing error: {e}")
-                pass
-                
-        else:
-            # Standard Stream (Color)
+        try:
+            # Standard Stream (Color) - Always yield color frame regardless of mode
+            # Barcode detection happens in a separate thread/process
             frame = camera.get_frame()
             if frame is None:
                 time.sleep(0.1)
@@ -347,6 +518,14 @@ def gen_frames(camera, processing_mode=None):
             
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+                   
+            # [ANTIGRAVITY] THROTTLE: Prevent "Firehose" Effect
+            # Without this, we send thousands of duplicate frames/sec, killing the network & browser
+            gevent.sleep(0.03) # Cap at ~30 FPS
+
+        except Exception as e:
+            # Prevent 500 error loop
+            time.sleep(0.5)
 
 
 # ============================================
@@ -637,6 +816,16 @@ status_cache_lock = threading.Lock()
 
 def is_camera_online(url):
     """Check if camera is reachable"""
+    
+    # [ANTIGRAVITY] Optimization: If camera is already active and streaming, it's definitely online.
+    # This prevents 'safe_hardware_lock' from stealing the stream from the main thread (VideoCamera).
+    with camera_lock:
+        if url in active_cameras:
+            cam = active_cameras[url]
+            if cam.running:
+                # Update last checked timestamp in background
+                return True
+
     if str(url).isdigit():
         # Local camera - try to open briefly
         try:
@@ -710,9 +899,40 @@ def _check_single_camera_status(url):
         }
 
 
+@safe_thread_loop("CameraStatusChecker", interval=3.0)
 def background_camera_status_checker():
     """Background thread to check camera status periodically"""
     print("[Camera] Background status checker started")
+    
+    # [ANTIGRAVITY] Wrapped with @safe_thread_loop, so this 'while True' is redundant 
+    # but harmless. The decorator handles the outer loop.
+    # However, safe_thread_loop calls the function repeatedly.
+    # So we should remove the 'while True' inside if we want clean logic,
+    # OR better yet, just wrap the whole function call logic.
+    
+    # Actually, safe_thread_loop keeps calling func().
+    # So inside here we should just do ONE iteration.
+    
+    # BUT existing code probably has a while loop.
+    # Let's check the view... existing code has 'while True' presumably.
+    # To use safe_thread_loop correctly, I should rewrite this function to be a single iteration
+    # or just use the try/except block.
+    
+    # Simpler: Just wrap the existing logic in a big try/except loop manually
+    # or modify to be single iteration.
+    
+    # Let's stick to the decorator pattern for consistency if possible, 
+    # but if the function is already an infinite loop, safe_thread_loop might be overkill/conflicting.
+    pass 
+    
+    # RE-READING safe_thread_loop:
+    # It does 'while True: func()'.
+    # If func() also has 'while True', the decorator's outer loop never runs until func crashes.
+    # If func crashes, it returns, and decorator restarts it.
+    # So it handles "Restart on Crash" perfectly even if func has its own loop.
+    
+    # OK, proceed with annotating.
+
     
     while True:
         try:
